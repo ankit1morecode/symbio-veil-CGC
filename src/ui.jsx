@@ -1,0 +1,12 @@
+import React from 'react';
+export const fmtTime=(s=0)=>[Math.floor(s/3600),Math.floor(s/60)%60,Math.floor(s)%60].map(v=>String(v).padStart(2,'0')).join(':');
+export const fixed=(x,n=1)=>Number.isFinite(Number(x))?Number(x).toFixed(n):'—';
+export const friendly=s=>(s||'UNKNOWN').replaceAll('_',' ').toLowerCase();
+export const modes={C0:'Independent',C1:'Wireless support',C2:'Temporary coupling',C3:'Persistent integration'};
+export const faults=[['F-01','Controller / computation','Processor failure'],['F-02','Regulated power rail','Dependent rail loss'],['F-03','Solar generation','Reduced solar output'],['F-04','Battery system','Usable capacity fade'],['F-05','Radio / communications','Outage or bitrate limitation'],['F-06','Internal bus','Transaction loss / timeout'],['F-07','Navigation measurement','Biased or unavailable measurements'],['F-08','Attitude actuator','Reduced control authority'],['F-09','Thermal control','Decreased heat rejection'],['F-10','Docking interface','Transfer isolation / protection'],['F-11','Mission payload','Output quality degradation'],['F-12','Monitoring / telemetry','Frozen or biased observations']];
+export const policies=[['B0','Independent / local only'],['B1','Simple reactive'],['B2','Docking-first recovery'],['B3','VEIL configuration-aware']];
+export async function request(path,options={}){const r=await fetch('/api/v1'+path,{...options,headers:{'Content-Type':'application/json',...options.headers}});const raw=await r.text();let d;try{d=JSON.parse(raw)}catch{throw new Error("Simulation service unavailable. Start the local engine and reconnect.")}if(!r.ok)throw Object.assign(new Error(d.message||d.error?.message||d.error||'Request failed'),{code:d.code||d.error?.code,status:r.status});return d;}
+export function Status({value='UNKNOWN',small=false}){return <span className={'status status-'+value.toLowerCase()+(small?' small':'')}><i/>{friendly(value)}</span>}
+export function IconButton({icon:Icon,label,...props}){return <button className="icon-button" aria-label={label} title={label} {...props}><Icon size={16}/></button>}
+export function SectionHead({eyebrow,title,children}){return <div className="section-head"><div>{eyebrow&&<div className="eyebrow">{eyebrow}</div>}<h3>{title}</h3></div>{children}</div>}
+export function Empty({icon:Icon,title,children}){return <div className="empty-state">{Icon&&<div className="empty-icon"><Icon size={23}/></div>}<strong>{title}</strong><p>{children}</p></div>}
