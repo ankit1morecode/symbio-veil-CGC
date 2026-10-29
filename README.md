@@ -27,6 +27,10 @@ npm run dev
 
 The server reads `MONGODB_URI` from its process environment and automatically loads an optional local `.env` file from the project directory with Node's environment-file loader. You may therefore put `MONGODB_URI=mongodb://127.0.0.1:27017/veil` in the ignored `.env` file instead of setting it in PowerShell. Without a usable MongoDB connection, local atomic JSON run journals under `data/runs/` provide the documented fallback; check the application/server persistence status to distinguish connected, not configured and unavailable modes. `DATA_DIRECTORY` can override the local journal directory. Never place database credentials in source control. `PORT` can override the backend's default port, but the Vite proxy must then point at the same port.
 
+## Deploy online
+
+For a Vercel frontend, a Render simulation service, and MongoDB Atlas persistence, follow the [deployment guide](docs/deploy-vercel-render.md). The hosted version is a shared synthetic research demonstration; user authentication, private run ownership, and multi-instance coordination are not implemented.
+
 ## Build and verify
 
 ```powershell
