@@ -92,7 +92,7 @@ The `VITE_API_BASE_URL` variable only works once the prepared frontend changes a
 ## 5. Verify the deployment
 
 1. Visit the Render `/api/health` endpoint and verify `status: "ok"` and MongoDB storage.
-2. Open your Vercel URL. The dashboard should finish initializing and display two spacecraft. A sleeping free service may take time to wake.
+2. Open your Vercel URL. The dashboard should finish initializing and display six spacecraft in a new run. An existing saved run retains its original count; use **Start six-satellite simulation** to create a new one. A sleeping free service may take time to wake.
 3. Play and pause the simulation, open a spacecraft twin, and inject a compatible fault. Check the event timeline and decision inspector.
 4. Run the E1 scenario, inspect the pair and mission outcome, and save/export a checkpoint. Refresh the site and confirm the app reconnects to the backend.
 5. In browser developer tools, check that API requests go to the HTTPS Render host and the stream uses WSS. If requests fail, check the actual Vercel origin in `ALLOWED_ORIGINS`, the frontend build's `VITE_API_BASE_URL`, the backend health/logs, and whether the database is reachable.

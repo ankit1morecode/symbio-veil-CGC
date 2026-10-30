@@ -42,6 +42,12 @@ test('Local HTTP, WebSocket, command validation, export and durable journal inte
     const competing = await request(`/runs/${state.runId}/control`, { commandId: 'competing', expectedRevision: beforeTick, action: 'play' }); assert.equal(competing.status, 409);
     const duplicate = await request(`/runs/${state.runId}/control`, pause); assert.equal(duplicate.status, 200); assert.equal(duplicate.data.revision, state.revision);
     const matched = await request('/experiments', { scenarioId: 'E1', seed: 42, durationS: 200 }); assert.equal(matched.status, 200); assert.equal(matched.data.results.length, 4);
+    const six = await request('/runs', { scenarioId: 'VEIL-REF-01', spacecraftCount: 6, faultMode: 'MANUAL' });
+    assert.equal(six.status, 201); assert.equal(six.data.spacecraft.length, 6); assert.equal(six.data.communications.enabled, true);
+    const sixStep = await request(`/runs/${six.data.runId}/control`, { commandId: 'network-step', expectedRevision: six.data.revision, action: 'step', seconds: 1 });
+    assert.equal(sixStep.status, 200); assert.equal(sixStep.data.communications.totalExchanges, 3);
+    assert.equal(new Set(sixStep.data.communications.links.flatMap(link => link.participants)).size, 6);
+    assert.ok(sixStep.data.communications.links.every(link => link.status === 'PAUSED'));
     const socket = new WebSocket(`ws://127.0.0.1:${port}/api/v1/runs/${state.runId}/stream`);
     const first = await new Promise((resolve, reject) => { socket.once('message', raw => resolve(JSON.parse(raw))); socket.once('error', reject); }); assert.equal(first.type, 'snapshot'); assert.equal(first.state.runId, state.runId);
     const browserSocket = new WebSocket(`ws://127.0.0.1:${port}/api/v1/runs/${state.runId}/stream`, { origin: 'https://veil.example' });

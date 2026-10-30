@@ -107,6 +107,20 @@ function Connections({ spacecraft, connections, time, onPairSelect }) {
   });
 }
 
+function TelemetryLinks({ spacecraft, communications, time }) {
+  const active = (communications?.links || []).filter(link => link.status === 'ACTIVE' && link.dataState === 'OPERATIONAL');
+  return active.map(link => {
+    const [a, b] = (link.participants || []).map(id => spacecraft.find(s => s.id === id));
+    if (!a?.position || !b?.position) return null;
+    const p1 = toScene(a.position), p2 = toScene(b.position);
+    const pulse = p1.clone().lerp(p2, (time % 4) / 4);
+    return <group key={link.id}>
+      <Line points={[p1, p2]} color="#83a7ff" lineWidth={1} transparent opacity={.75} dashed dashSize={.035} gapSize={.045} />
+      <mesh position={pulse}><sphereGeometry args={[.012, 8, 8]} /><meshBasicMaterial color="#d0ddff" /></mesh>
+    </group>;
+  });
+}
+
 function CameraFocus({ focusedId, spacecraft, view }) {
   const { controls, camera } = useThree();
   useEffect(() => {
@@ -126,7 +140,7 @@ function CameraFocus({ focusedId, spacecraft, view }) {
   return null;
 }
 
-export function OrbitalScene({ spacecraft = [], connections = [], time = 0, showLabels = true, showTrails = true, onSelect, onPairSelect, focusedId = null, view = 'earth' }) {
+export function OrbitalScene({ spacecraft = [], connections = [], communications, time = 0, showLabels = true, showTrails = true, onSelect, onPairSelect, focusedId = null, view = 'earth' }) {
   return <SceneBoundary>
     <Canvas camera={{ position: [6.1, 3.4, 6.4], fov: 39, near: .05, far: 120 }} dpr={[1, 1.7]} gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }} fallback={<div style={fallbackStyle}>A WebGL2-capable browser is required for the 3D view.</div>} style={{ background: 'transparent' }}>
       <ambientLight intensity={.12} color="#7d9dc6" />
@@ -136,6 +150,7 @@ export function OrbitalScene({ spacecraft = [], connections = [], time = 0, show
       <Suspense fallback={null}><Earth time={time} /></Suspense>
       {showTrails && spacecraft.map((s, i) => <OrbitTrail key={s.id || i} satellite={s} color={palette[i % palette.length]} />)}
       {spacecraft.map((s, i) => <Spacecraft key={s.id || i} satellite={s} index={i} showLabels={showLabels} onSelect={onSelect} focusedId={focusedId} />)}
+      <TelemetryLinks spacecraft={spacecraft} communications={communications} time={time} />
       <Connections spacecraft={spacecraft} connections={connections} time={time} onPairSelect={onPairSelect} />
       <OrbitControls makeDefault enablePan={false} minDistance={4.9} maxDistance={16} enableDamping dampingFactor={.07} rotateSpeed={.4} zoomSpeed={.65} />
       <CameraFocus focusedId={focusedId} spacecraft={spacecraft} view={view} />

@@ -45,12 +45,16 @@ The test suite covers implemented foundations and regression cases. It must not 
 
 ## Explore the application
 
-1. Start with the two-spacecraft reference constellation. Rotate and zoom the Earth scene; select a spacecraft to open its digital twin.
+1. Start a new six-spacecraft constellation from the dashboard. Rotate and zoom the Earth scene; select a spacecraft to open its digital twin. The scenario library also offers two, five and ten spacecraft.
 2. Inspect the component hierarchy and its modeled health, battery, mission and dependencies. Use the observation/truth controls to understand the difference between what exists and what an agent knows.
 3. Select an eligible component in the fault console, choose a supported fault model and inject or schedule an incident. Manual, automatic and hybrid modes share the simulation engine.
 4. Inspect recovery candidates, hard rejection reasons, weighted scores, contract state and actual outcome. External assistance can complete a task while the original component remains failed.
 5. Open an active pair to inspect each participant, separate mechanical/data/power states, flow direction, resource accounting and termination feasibility.
 6. Try E0–E6, pause/step/change simulation speed, inspect events, save checkpoints and export the run evidence. Compare policies using shared initial conditions and seeds.
+
+New runs launched in the browser default to six spacecraft. The app resumes a previously saved run without changing its spacecraft count; use **Start six-satellite simulation** or choose six in the scenario library to create a new one. Existing saved runs are not converted. The backend API retains its two-spacecraft default unless a count is supplied.
+
+In a six-spacecraft run, the synthetic coordination network selects feasible peer links in 30-second simulation slots. It ranks links by mission urgency, health and energy reserve, then rotates among previously contacted pairs. One spacecraft participates in at most one coordination link per slot; Earth occlusion, radio availability, authorization, temperature, reserve protection and active mission reservations can block a link. Coordination traffic records data and radio energy separately from a mission-service contract. The network is disabled for independent policy B0 and scenario E0, and for other constellation sizes. Pausing stops simulated transmissions; stepping advances them by the requested simulation time.
 
 Controls send validated commands to one authoritative local simulation service. Changing camera position or opening a panel does not advance the simulation or change physical resources. Satellite models and selection indicators are enlarged schematic visuals.
 
@@ -58,7 +62,7 @@ Controls send validated commands to one authoritative local simulation service. 
 
 | ID | Purpose |
 |---|---|
-| VEIL-REF-01 | Two spacecraft with an operator-selected fault |
+| VEIL-REF-01 | Reference constellation with an operator-selected fault; the browser defaults to six spacecraft |
 | E0 | Independent baseline after processor loss |
 | E1 | Wireless processing assistance |
 | E2 | Temporary physical support in deliberately reachable geometry |

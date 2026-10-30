@@ -4761,3 +4761,91 @@ input::placeholder {
 .policy-option.checked>svg {
     flex-shrink: 0
 }
+/* Show the entire constellation without squeezing all readings into one row. */
+.telemetry-values {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 12px;
+}
+.pair-selector {
+    padding: 16px;
+    margin-bottom: 18px;
+    border: 1px solid #263642;
+    border-radius: 8px;
+    background: #101b25;
+}
+.pair-selector > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+.pair-selector button {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 12px;
+    color: #c7d8e0;
+    text-align: left;
+    border: 1px solid #2d404e;
+    border-radius: 5px;
+    background: #16232d;
+    cursor: pointer;
+}
+.pair-selector button.selected { border-color: #9be2be; background: #193b32; }
+.pair-selector button small { color: #91a5b1; }
+.priority-context {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin: 12px 0 18px;
+    padding: 11px 13px;
+    color: #b6d6c5;
+    border: 1px solid #284338;
+    border-radius: 6px;
+    background: #13251f;
+    font-size: 11px;
+}
+.priority-context span { color: #8fa99e; line-height: 1.4; }
+
+.network-panel {
+    margin: 17px 0;
+    padding: 20px;
+    border: 1px solid #283b49;
+    border-radius: 9px;
+    background: linear-gradient(125deg, #111d29, #0e151d 70%);
+}
+.network-heading { display: flex; justify-content: space-between; gap: 18px; align-items: start; }
+.network-heading h2 { color: #e1eaf0; font-size: 16px; font-weight: 500; margin: 6px 0; }
+.network-heading p { max-width: 580px; color: #8296a7; font-size: 11px; line-height: 1.5; margin: 0; }
+.network-summary { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; white-space: nowrap; }
+.network-summary > span { display: flex; align-items: center; gap: 7px; color: #a6e2c1; font-size: 11px; }
+.network-summary small { color: #788d9d; font-size: 10px; }
+.network-link-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 17px; }
+.network-link { padding: 12px; border: 1px solid #304357; border-radius: 7px; background: #15212d; }
+.network-link-top, .network-link-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.network-link-top > span, .network-link-foot > span { display: flex; align-items: center; gap: 5px; }
+.network-link-top { color: #90a6bd; font-size: 9px; letter-spacing: .06em; }
+.network-link-top strong { color: #c6dcff; background: #233b59; border-radius: 4px; padding: 3px 6px; font-size: 10px; }
+.network-participants { display: flex; align-items: center; gap: 8px; margin: 13px 0; }
+.network-participants button { display: flex; align-items: center; gap: 5px; color: #e0eaf1; border: 0; background: none; padding: 0; cursor: pointer; font-size: 11px; }
+.network-participants button:hover { color: #9be2be; }
+.network-link-arrow { color: #83a7ff; }
+.network-link-foot { color: #90a7bb; font-size: 9px; }
+.network-link-foot > span:first-child { color: #9bd9b6; }
+.network-empty { display: flex; gap: 12px; align-items: center; margin-top: 16px; padding: 15px; border: 1px dashed #314354; border-radius: 6px; color: #89a2b8; }
+.network-empty div { display: flex; flex-direction: column; gap: 4px; }
+.network-empty strong { font-size: 11px; color: #bbced9; font-weight: 500; }
+.network-empty span { font-size: 10px; line-height: 1.5; }
+.network-history { margin-top: 14px; color: #a0b6c6; font-size: 10px; }
+.network-history summary { cursor: pointer; padding: 8px 0; }
+.network-history summary span { margin-left: 8px; color: #7790a4; }
+.network-history-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.network-history-grid > div { display: flex; flex-direction: column; gap: 5px; padding: 10px; border-radius: 5px; background: #15212d; }
+.network-history-grid strong { color: #c8d8e2; font-size: 10px; font-weight: 500; }
+.network-history-grid span, .network-history-grid small { color: #8399a9; font-size: 9px; }
+.network-note { display: flex; gap: 6px; align-items: center; margin-top: 13px; color: #79948e; font-size: 9px; line-height: 1.4; }
+@media (max-width: 600px) {
+    .network-heading { flex-direction: column; }
+    .network-summary { align-items: flex-start; white-space: normal; }
+}
