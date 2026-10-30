@@ -29,11 +29,18 @@ test('Local HTTP, WebSocket, command validation, export and durable journal inte
     const unsupported = await request(`/runs/${state.runId}/faults`, { commandId: 'bad-fault', expectedRevision: state.revision, spacecraftId: 'SAT-A', componentId: 'SAT-A-alpha', modelId: 'F-03' }); assert.equal(unsupported.status, 400); assert.equal(unsupported.data.error.code, 'UNSUPPORTED_FAULT');
     const stepped = await request(`/runs/${state.runId}/control`, { commandId: 'step-1400', expectedRevision: state.revision, action: 'step', seconds: 1400 }); assert.equal(stepped.status, 200); state = stepped.data; assert.equal(state.connections[0].mechanicalState, 'RELEASED'); assert.equal(state.metrics.missionSuccess, 1);
     const stale = await request(`/runs/${state.runId}/control`, { commandId: 'stale', expectedRevision: 0, action: 'play' }); assert.equal(stale.status, 409);
+    const beforeCheckpoint = state.revision;
     const saved = await request(`/runs/${state.runId}/checkpoints`, { commandId: 'save', expectedRevision: state.revision, name: 'Integration checkpoint' }); assert.equal(saved.status, 201); assert.ok(saved.data.checkpoint.checksum); state = saved.data;
+    const staleAfterCheckpoint = await request(`/runs/${state.runId}/control`, { commandId: 'stale-after-checkpoint', expectedRevision: beforeCheckpoint, action: 'play' }); assert.equal(staleAfterCheckpoint.status, 409);
     const events = await request(`/runs/${state.runId}/events?limit=2&spacecraftId=SAT-A`); assert.equal(events.data.events.length, 2); assert.ok(events.data.total > 2);
     const bundle = await request(`/exports/${state.runId}`); assert.equal(bundle.data.kind, 'VEIL_REPLAY_BUNDLE'); assert.ok(bundle.data.ledger.some(x => x.type === 'power_transfer'));
     const journal = JSON.parse(await fs.readFile(path.join(dir, `${state.runId}.json`), 'utf8')); assert.equal(journal.state.time, 1400); assert.ok(journal.checksum);
     const replay = await request('/imports', bundle.data); assert.equal(replay.status, 201); assert.equal(replay.data.time, 1400);
+    const { advance } = await import('../server/engine.js'); const beforeTick = state.revision; advance(service.runs.get(state.runId), 1);
+    const pause = { commandId: 'pause-after-tick', expectedRevision: beforeTick, action: 'pause' };
+    const paused = await request(`/runs/${state.runId}/control`, pause); assert.equal(paused.status, 200); state = paused.data;
+    const competing = await request(`/runs/${state.runId}/control`, { commandId: 'competing', expectedRevision: beforeTick, action: 'play' }); assert.equal(competing.status, 409);
+    const duplicate = await request(`/runs/${state.runId}/control`, pause); assert.equal(duplicate.status, 200); assert.equal(duplicate.data.revision, state.revision);
     const matched = await request('/experiments', { scenarioId: 'E1', seed: 42, durationS: 200 }); assert.equal(matched.status, 200); assert.equal(matched.data.results.length, 4);
     const socket = new WebSocket(`ws://127.0.0.1:${port}/api/v1/runs/${state.runId}/stream`);
     const first = await new Promise((resolve, reject) => { socket.once('message', raw => resolve(JSON.parse(raw))); socket.once('error', reject); }); assert.equal(first.type, 'snapshot'); assert.equal(first.state.runId, state.runId);

@@ -41,6 +41,31 @@ test('SYS-07 / 08: arbitrary distant orbits cannot dock; valid capture updates i
 test('SYS-09: mission verification depends on output predicate after finite execution',()=>{const r=make({scenarioId:'E1',faultMode:'HYBRID'});advance(r,31);assert.equal(r.connections[0].status,'ACTIVE');assert.equal(r.metrics.missionSuccess,0);advance(r,70);assert.equal(r.metrics.missionSuccess,1);assert.equal(r.contracts[0].evidenceRefs[0].predicatePassed,true);});
 test('SYS-11: versioned replay includes all scientific context and imports with checksum',()=>{const r=make();advance(r,10);const bundle=exportRun(r);assert.ok(bundle.initialStates);assert.ok(bundle.ledger.length);assert.equal(bundle.provenance,'P2 SYNTHETIC REFERENCE');const imported=importRun(bundle);assert.equal(imported.time,10);assert.notEqual(imported.runId,r.runId);bundle.replayState.time=11;assert.throws(()=>importRun(bundle),{code:'CHECKSUM_MISMATCH'});});
 test('API-001 / ARCH-003: command IDs idempotent; stale expected revision rejected',()=>{const r=make(),payload={commandId:'same',expectedRevision:0,spacecraftId:'SAT-A',componentId:'SAT-A-alpha',modelId:'F-01'};injectFault(r,payload);injectFault(r,payload);assert.equal(r.faults.length,1);assert.throws(()=>control(r,{commandId:'stale',expectedRevision:0,action:'play'}),{code:'REVISION_CONFLICT'});});
+test('Background ticks permit a current operator intent, but competing commands still conflict',()=>{
+ const r=make();control(r,{commandId:'play',expectedRevision:r.revision,action:'play'});const seen=r.revision;advance(r,1);advance(r,1);
+ const pause={commandId:'pause',expectedRevision:seen,action:'pause'};control(r,pause);assert.equal(r.playing,false);const accepted=r.revision;control(r,pause);assert.equal(r.revision,accepted);
+ const before=JSON.stringify(r);assert.throws(()=>control(r,{commandId:'competing',expectedRevision:seen,action:'time_scale',value:2}),{code:'REVISION_CONFLICT'});assert.equal(JSON.stringify(r),before);
+ assert.throws(()=>control(r,{commandId:'future',expectedRevision:r.revision+1,action:'play'}),{code:'REVISION_CONFLICT'});
+});
+test('Commands allowed across ticks still validate current scheduling constraints',()=>{
+ const r=make();const seen=r.revision;advance(r,3);const before=JSON.stringify(r);
+ assert.throws(()=>injectFault(r,{commandId:'past',expectedRevision:seen,spacecraftId:'SAT-A',componentId:'SAT-A-alpha',modelId:'F-01',activationTime:1}),{code:'INVALID_PARAMETER'});assert.equal(JSON.stringify(r),before);
+});
+test('Reset and checkpoint restore retain command history and advance the conflict barrier',()=>{
+ const r=make();const play={commandId:'play-before-reset',expectedRevision:0,action:'play'};control(r,play);const beforeReset=r.revision;
+ control(r,{commandId:'reset',expectedRevision:beforeReset,action:'reset'});const afterReset=r.revision;control(r,play);assert.equal(r.revision,afterReset);assert.equal(r.playing,false);
+ assert.throws(()=>control(r,{commandId:'stale-reset',expectedRevision:beforeReset,action:'play'}),{code:'REVISION_CONFLICT'});
+ const point=checkpoint(r,'saved');control(r,{commandId:'scale',expectedRevision:r.revision,action:'time_scale',value:5});const beforeRestore=r.revision;
+ control(r,{commandId:'restore',expectedRevision:beforeRestore,action:'load_checkpoint',checkpointId:point.id});assert.equal(r.lastCommandRevision,r.revision);
+ assert.throws(()=>control(r,{commandId:'stale-restore',expectedRevision:beforeRestore,action:'play'}),{code:'REVISION_CONFLICT'});
+ const restored=r.revision;control(r,{commandId:'scale',expectedRevision:beforeRestore,action:'time_scale',value:5});assert.equal(r.revision,restored);
+});
+test('Older persisted and replayed runs acquire a conservative command barrier',()=>{
+ const r=make();control(r,{commandId:'first',expectedRevision:r.revision,action:'play'});delete r.lastCommandRevision;const savedRevision=r.revision;advance(r,1);
+ assert.throws(()=>control(r,{commandId:'pre-save',expectedRevision:savedRevision-1,action:'pause'}),{code:'REVISION_CONFLICT'});
+ control(r,{commandId:'after-load',expectedRevision:savedRevision,action:'pause'});assert.equal(r.playing,false);
+ const bundle=exportRun(r);delete bundle.replayState.lastCommandRevision;const imported=importRun(bundle);const seen=imported.revision;advance(imported,1);control(imported,{commandId:'replay-pause',expectedRevision:seen,action:'pause'});assert.equal(imported.playing,false);
+});
 test('Scenario validation refuses unsupported values and extra load',()=>{assert.throws(()=>make({scenarioId:'BAD'}),{code:'INVALID_PARAMETER'});assert.throws(()=>make({seed:-1}),{code:'INVALID_PARAMETER'});assert.throws(()=>make({spacecraftCount:11}),{code:'INVALID_PARAMETER'});});
 test('E0–E6 expected demonstrator outcomes, physical release, reciprocal service and persistent integration',()=>{for(const scenarioId of ['E0','E1','E2','E3','E4','E5','E6']){const r=make({scenarioId,faultMode:'HYBRID'});advance(r,1800);if(scenarioId==='E0'){assert.equal(r.metrics.missionSuccess,0);continue;}assert.ok(r.metrics.missionSuccess>=1,scenarioId);if(['E2','E4'].includes(scenarioId))assert.equal(r.connections[0].mechanicalState,'RELEASED');if(scenarioId==='E3')assert.ok(r.contracts.some(c=>c.services.includes('data.relay/v1')));if(scenarioId==='E6'){assert.equal(r.connections[0].mode,'C3');assert.equal(r.connections[0].mechanicalState,'CAPTURED');}if(scenarioId==='E5')assert.notEqual(r.spacecraft[0].interfaceVersion,r.spacecraft[1].interfaceVersion);}});
 

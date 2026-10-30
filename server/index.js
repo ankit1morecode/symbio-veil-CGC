@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { scenarios, faultModels } from './catalog.js';
-import { makeRun, snapshot, control, injectFault, advance, checkpoint, exportRun, importRun, experiment, SimulationError, validateMutation } from './engine.js';
+import { makeRun, snapshot, control, injectFault, advance, checkpoint, exportRun, importRun, experiment, SimulationError, validateMutation, completeMutation } from './engine.js';
 import { connectStorage, storageLabel, saveRun, loadRuns, closeStorage } from './storage.js';
 try { process.loadEnvFile?.(); } catch { }
 
@@ -55,7 +55,7 @@ app.get('/api/v1/runs/:id/decisions', (req, res) => res.json(findRun(req.params.
 app.get('/api/v1/runs/:id/contracts', (req, res) => res.json(findRun(req.params.id).contracts));
 app.get('/api/v1/runs/:id/connections', (req, res) => res.json(findRun(req.params.id).connections));
 app.get('/api/v1/runs/:id/events', (req, res) => { const run = findRun(req.params.id); let rows = run.events; if (req.query.spacecraftId) rows = rows.filter(x => x.spacecraftId === req.query.spacecraftId); if (req.query.type) rows = rows.filter(x => x.type.includes(req.query.type)); if (req.query.severity) rows = rows.filter(x => x.severity === req.query.severity); const offset = Math.max(0, Number(req.query.offset) || 0), limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 100)); res.json({ events: rows.slice(offset, offset + limit), total: rows.length, nextOffset: offset + limit < rows.length ? offset + limit : null }); });
-app.post('/api/v1/runs/:id/checkpoints', asyncRoute(async (req, res) => { const run = findRun(req.params.id); const check = validateMutation(run, req.body); if (check.duplicate) { res.json(snapshot(run)); return; } const point = checkpoint(run, req.body.name); run.commandResults[check.key] = { accepted: true, checkpointId: point.id }; run.revision++; await persist(run); broadcast(run); res.status(201).json({ ...snapshot(run), checkpoint: point }); }));
+app.post('/api/v1/runs/:id/checkpoints', asyncRoute(async (req, res) => { const run = findRun(req.params.id); const check = validateMutation(run, req.body); if (check.duplicate) { res.json(snapshot(run)); return; } const point = checkpoint(run, req.body.name); completeMutation(run, check.key, { checkpointId: point.id }); await persist(run); broadcast(run); res.status(201).json({ ...snapshot(run), checkpoint: point }); }));
 app.post('/api/v1/runs/:id/checkpoints/:checkpointId/restore', mutate((run, body, params) => control(run, { ...body, action: 'load_checkpoint', value: params.checkpointId })));
 app.get('/api/v1/exports/:runId', (req, res) => { const run = findRun(req.params.runId); res.setHeader('Content-Disposition', `attachment; filename="VEIL-${run.scenarioId}-${Math.floor(run.time)}s.json"`); res.json(exportRun(run)); });
 app.post('/api/v1/imports', asyncRoute(async (req, res) => { const run = importRun(req.body); run.storage = storageLabel(); runs.set(run.runId, run); defaultRunId = run.runId; await persist(run); res.status(201).json(snapshot(run)); }));
