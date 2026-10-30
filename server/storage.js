@@ -2,24 +2,26 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import mongoose from 'mongoose';
 import {createHash} from 'node:crypto';
+import {diagnoseMongoError} from './mongo-diagnostics.js';
 const dataRoot=path.resolve(process.env.DATA_DIRECTORY||'data/runs');
 let Model, mongoConnected=false,mongoConfigured=false;
 export async function connectStorage(){
  const requiredValue=(process.env.REQUIRE_MONGODB||'false').trim().toLowerCase();
  if(!['true','false'].includes(requiredValue))throw new Error('REQUIRE_MONGODB must be true or false.');
  const mongoRequired=requiredValue==='true';
- mongoConfigured=Boolean(process.env.MONGODB_URI?.trim());
+ const mongoUri=process.env.MONGODB_URI?.trim();
+ mongoConfigured=Boolean(mongoUri);
  if(mongoRequired&&!mongoConfigured)throw new Error('MongoDB is required but MONGODB_URI is not configured.');
  if(mongoConfigured){
   try{
-   await mongoose.connect(process.env.MONGODB_URI,{serverSelectionTimeoutMS:3500});
+   await mongoose.connect(mongoUri,{serverSelectionTimeoutMS:30000});
    const schema=new mongoose.Schema({runId:{type:String,unique:true,index:true},state:mongoose.Schema.Types.Mixed,checksum:String,updatedAt:Date});
    Model=mongoose.models.VeilRun||mongoose.model('VeilRun',schema);mongoConnected=true;
    console.log('VEIL persistence: MongoDB connected');
    return;
   }catch(error){
    // Do not log the driver's error or URI: either may contain credentials.
-   if(mongoRequired)throw new Error('MongoDB is required but the connection failed. Check backend configuration and database network access.');
+   if(mongoRequired){const diagnosis=diagnoseMongoError(error);throw new Error(`MongoDB is required but the connection failed. [${diagnosis.code}] ${diagnosis.message}`);}
    console.warn('MongoDB unavailable; using atomic local JSON journals.');
   }
  }else console.log('VEIL persistence: local JSON journals (MONGODB_URI not configured)');

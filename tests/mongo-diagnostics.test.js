@@ -1,0 +1,62 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { diagnoseMongoError } from '../server/mongo-diagnostics.js';
+
+function assertDiagnosis(error, expected) {
+  const result = diagnoseMongoError(error);
+  assert.equal(result.code, expected);
+  assert.equal(typeof result.message, 'string');
+  assert.ok(result.message.length > 0);
+  return result;
+}
+
+test('recognizes authentication and permission failures from driver codes', () => {
+  assertDiagnosis({ code: 18 }, 'MONGODB_AUTH');
+  assertDiagnosis({ codeName: 'AuthenticationFailed' }, 'MONGODB_AUTH');
+  assertDiagnosis({ code: 13 }, 'MONGODB_PERMISSION');
+  assertDiagnosis({ codeName: 'Unauthorized' }, 'MONGODB_PERMISSION');
+});
+
+test('classifies malformed connection configuration by documented error name', () => {
+  for (const name of ['MongoParseError', 'MongoInvalidArgumentError']) {
+    assertDiagnosis({ name }, 'MONGODB_URI');
+  }
+});
+
+test('classifies DNS, TLS, and network failures using known error codes', () => {
+  for (const code of ['ENOTFOUND', 'EAI_AGAIN', 'ENODATA']) {
+    assertDiagnosis({ code }, 'MONGODB_DNS');
+  }
+  for (const code of ['CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE']) {
+    assertDiagnosis({ code }, 'MONGODB_TLS');
+  }
+  for (const code of ['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH']) {
+    assertDiagnosis({ code }, 'MONGODB_NETWORK');
+  }
+  assertDiagnosis({ name: 'MongoNetworkTimeoutError' }, 'MONGODB_NETWORK');
+});
+
+test('distinguishes a generic selection failure from specific nested driver errors', () => {
+  for (const name of ['MongoServerSelectionError', 'MongooseServerSelectionError']) {
+    assertDiagnosis({ name }, 'MONGODB_SELECTION');
+    const nested = {
+      name,
+      reason: { servers: new Map([['example', { error: { cause: { code: 18 } } }]]) },
+    };
+    assertDiagnosis(nested, 'MONGODB_AUTH');
+  }
+  assertDiagnosis({ cause: { cause: { code: 'ENOTFOUND' } } }, 'MONGODB_DNS');
+  assertDiagnosis({ reason: { servers: new Map([['server', { error: { code: 'ECONNREFUSED' } }]]) } }, 'MONGODB_NETWORK');
+});
+
+test('unknown or cyclic errors remain safe and do not echo untrusted fields', () => {
+  const secret = 'mongodb://private-user:do-not-print@secret-host.invalid/private-db';
+  const input = { name: secret, code: secret, codeName: secret, message: secret, stack: secret };
+  input.cause = input;
+  input.reason = { servers: new Map([['secret-host.invalid', { error: input }]]) };
+  const result = assertDiagnosis(input, 'MONGODB_UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(result), /private-user|do-not-print|secret-host|private-db/);
+  const recognized = assertDiagnosis({ code: 18, message: secret, stack: secret }, 'MONGODB_AUTH');
+  assert.doesNotMatch(JSON.stringify(recognized), /private-user|do-not-print|secret-host|private-db/);
+  assertDiagnosis(null, 'MONGODB_UNKNOWN');
+});
