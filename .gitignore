@@ -9,3 +9,4 @@ server/data/
 
 data/
 .npm-cache/
+.claude/launch.json
