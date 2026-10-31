@@ -1833,56 +1833,6 @@ input::placeholder {
     margin: 5px 0 24px
 }
 
-.preference-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 15px;
-    border-bottom: 1px solid #263442;
-    padding: 20px 0
-}
-
-.preference-row>span {
-    font-size: 12px;
-    color: #bdd0dc
-}
-
-.preference-row small {
-    display: block;
-    color: #647e92;
-    font-size: 9px;
-    margin-top: 7px
-}
-
-.toggle {
-    height: 20px;
-    width: 35px;
-    border-radius: 13px;
-    background: #344554;
-    border: 1px solid #3d5362;
-    padding: 2px;
-    flex-shrink: 0
-}
-
-.toggle i {
-    height: 14px;
-    width: 14px;
-    display: block;
-    background: #9eb0bb;
-    border-radius: 50%;
-    transition: transform .2s
-}
-
-.toggle.checked {
-    background: #284a37;
-    border-color: #507d5d
-}
-
-.toggle.checked i {
-    background: #b8e6c4;
-    transform: translateX(14px)
-}
-
 .welcome-mark {
     width: 80px;
     height: 80px;
