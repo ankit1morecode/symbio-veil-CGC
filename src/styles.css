@@ -905,7 +905,7 @@ input::placeholder {
     display: flex;
     flex-direction: column;
     gap: 7px;
-    width: 33%
+    width: 25%
 }
 
 .fleet-metrics>div+div {
@@ -4829,4 +4829,34 @@ input::placeholder {
     .research-note {
         display: none
     }
+}
+
+.fleet-metrics strong {
+    font-size: 21px
+}
+
+.metric-dot.grey {
+    background: #6b7a88
+}
+
+.fleet-formations {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 14px 0 4px;
+    border-bottom: 1px solid #242d35
+}
+
+.fleet-formations span {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 9px;
+    color: #7c8b9a
+}
+
+.fleet-formations strong {
+    font-size: 11px;
+    color: #c2d2de;
+    font-weight: 500
 }

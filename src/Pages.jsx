@@ -3,6 +3,7 @@ import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Battery, Box, Che
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import TwinScene from './components/TwinScene.jsx';
 import CooperationWorkspace from './components/CooperationWorkspace.jsx';
+import PairTwin from './components/PairTwin.jsx';
 import BoardSafetyPanel from './components/BoardSafetyPanel.jsx';
 import { fmtTime, fixed, friendly, modes, policies, request, Status, SectionHead, Empty } from './ui.jsx';
 
@@ -42,7 +43,15 @@ export function TwinPage({ satellite, sats = [], truth, setTruth, setSelectedId,
   </div>;
 }
 
-export function PairPage(props) { return <CooperationWorkspace {...props} />; }
+// A selected pair opens the P03 twin; with none selected the cooperation
+// overview stays the way into one.
+export function PairPage(props) {
+  const { connection, contracts = [], onSelectConnection } = props;
+  if (!connection) return <CooperationWorkspace {...props} />;
+  const contract = contracts.find(c => c.id === connection.contractId);
+  return <PairTwin connection={connection} contract={contract} sats={props.sats} onTwin={props.onTwin}
+    time={props.time} onBack={() => onSelectConnection?.(null)} />;
+}
 
 export function Experiments({ scenarios = [], snapshot, notify, onLoad }) {
   const [scenarioId, setScenarioId] = useState('E1'), [seed, setSeed] = useState(snapshot?.seed || 20261029), [duration, setDuration] = useState(900), [busy, setBusy] = useState(false), [result, setResult] = useState(null), [error, setError] = useState(null);

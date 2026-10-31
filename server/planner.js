@@ -91,6 +91,21 @@ export function candidate(ctx, requester, provider, mode, providerPriority = nul
       reason: availableLocal ? 'Continue independent mission' : 'Controlled degradation / no cooperation', intervention: 0 };
   }
 
+  // A scoring input the agent cannot observe is not the same outcome as a check
+  // it evaluated and failed: the dossier requires UNSCORABLE and a conservative
+  // fallback, so these candidates never enter the ranking.
+  const unknown = [];
+  if (!Number.isFinite(b.energyWh)) unknown.push('DONOR_ENERGY_UNKNOWN');
+  if (!Number.isFinite(b.computeQuality)) unknown.push('PEER_QUALITY_UNKNOWN');
+  if (!Number.isFinite(b.temperatureK)) unknown.push('PEER_THERMAL_UNKNOWN');
+  if (!Number.isFinite(a.mission.deadline)) unknown.push('HORIZON_UNKNOWN');
+  if (b.observedHealth === 'UNKNOWN') unknown.push('PEER_STATE_UNKNOWN');
+  if (unknown.length) {
+    return { id: `${a.id}-${b.id}-${mode}`, provider: b.id, providerPriority, mode, status: 'UNSCORABLE', score: null,
+      checks: unknown.map(reason => ({ name: 'Scorable inputs', pass: false, reason })), features: null, costs: null,
+      completionS: null, reason: unknown.join(' · '), intervention: Number(mode[1]) };
+  }
+
   const geo = linkGeometry(a, b);
   const completionS = physical ? Math.max(60, geo.distanceM / .8) + 600 : 64;
   add('Policy permits cooperation', ctx.cooperationPermitted, 'INDEPENDENT_POLICY');
@@ -128,6 +143,18 @@ export function candidate(ctx, requester, provider, mode, providerPriority = nul
     costs: { energyWh: physical ? 1.6666667 : .15, propellantKg: physical ? .002 : 0, dataMbit: physical ? 0 : 8 },
     completionS, reason: passed ? 'All mandatory constraints passed' : checks.filter(c => !c.pass).map(c => c.reason).join(' · '),
     intervention: Number(mode[1]) };
+}
+
+// Each participant's own decision to enter a contract, taken from its own view at
+// the moment of acceptance. A plan is a proposal: this is the local veto the
+// dossier requires before reservation, and either side can withhold it.
+export function consent(view, role, caps) {
+  const reasons = [];
+  if (!view.authorized) reasons.push('NOT_AUTHORIZED');
+  if (!view.observationValid) reasons.push('OBSERVATIONS_UNKNOWN');
+  if (!(view.temperatureK < 333.15)) reasons.push('THERMAL_LIMIT');
+  if (role === 'provider' && view.energyWh - (caps?.energyWh ?? 0) < view.reserveWh) reasons.push('RESERVE_PROTECTED');
+  return { accepted: reasons.length === 0, role, reasons };
 }
 
 // Observed need for help, derived from a view rather than a spacecraft record.
