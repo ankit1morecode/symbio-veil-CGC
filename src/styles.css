@@ -127,7 +127,20 @@ input::placeholder {
     padding: 28px 16px 0;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #304538 transparent;
     z-index: 20
+}
+
+.sidebar-nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #304538 transparent
 }
 
 .brand {
@@ -261,7 +274,8 @@ input::placeholder {
 }
 
 .sidebar-bottom {
-    margin-top: auto
+    margin-top: auto;
+    flex-shrink: 0
 }
 
 .research-note {
@@ -4805,3 +4819,9 @@ input::placeholder {
 .docking-panel{display:flex;justify-content:space-between;align-items:center;gap:22px;margin-top:18px;padding:17px;border:1px solid #655139;border-radius:10px;background:#251e1744}.docking-panel h3{display:flex;gap:8px;align-items:center;color:#eed0a0;margin:7px 0;font-size:16px}.docking-panel p{margin:0;max-width:670px}.docking-panel>.secondary{flex-shrink:0}.docking-status{margin-top:9px;color:#edc484}
 @media(max-width:900px){.fleet-orbit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.docking-panel{align-items:flex-start;flex-direction:column}}
 @media(max-width:520px){.fleet-orbit-grid{grid-template-columns:1fr}.fleet-operations{padding:16px}}
+
+@media(max-height:600px) {
+    .research-note {
+        display: none
+    }
+}
