@@ -28,12 +28,14 @@ function allowedOrigin(origin) {
     return configuredOrigins().includes(origin);
 }
 export const app = express();
-app.use(cors({ origin(origin, cb) {
-    if (allowedOrigin(origin)) return cb(null, true);
-    const error = new Error('This browser origin is not allowed. Add its exact origin to ALLOWED_ORIGINS.');
-    error.code = 'ORIGIN_DENIED'; error.status = 403;
-    cb(error);
-} }));
+app.use(cors({
+    origin(origin, cb) {
+        if (allowedOrigin(origin)) return cb(null, true);
+        const error = new Error('This browser origin is not allowed. Add its exact origin to ALLOWED_ORIGINS.');
+        error.code = 'ORIGIN_DENIED'; error.status = 403;
+        cb(error);
+    }
+}));
 app.use(express.json({ limit: '25mb' }));
 const runs = new Map(), sockets = new Map(), saving = new Map(); let defaultRunId;
 const asyncRoute = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -69,14 +71,15 @@ export async function startServer() {
     await connectStorage(); for (const run of await loadRuns()) { run.storage = storageLabel(); runs.set(run.runId, run); defaultRunId = run.runId; } if (!defaultRunId) { const run = makeRun(); run.storage = storageLabel(); runs.set(run.runId, run); defaultRunId = run.runId; }
     const server = http.createServer(app), wss = new WebSocketServer({ noServer: true }); server.on('upgrade', (req, socket, head) => { const match = req.url.match(/^\/api\/v1\/runs\/([^/]+)\/stream/); if (!match) { socket.destroy(); return; } if (!allowedOrigin(req.headers.origin)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); return; } let run; try { run = findRun(match[1]); } catch { socket.destroy(); return; } wss.handleUpgrade(req, socket, head, ws => { if (!sockets.has(run.runId)) sockets.set(run.runId, new Set()); sockets.get(run.runId).add(ws); ws.send(JSON.stringify({ type: 'snapshot', sequence: run.sequence, revision: run.revision, state: snapshot(run) })); ws.on('close', () => sockets.get(run.runId)?.delete(ws)); }); });
     let last = performance.now(); const accumulator = new Map(); const ticker = setInterval(() => { const now = performance.now(), delta = Math.min(1, (now - last) / 1000); last = now; for (const run of runs.values()) { if (!run.playing) continue; const budget = (accumulator.get(run.runId) || 0) + delta * run.timeScale, seconds = Math.floor(budget); accumulator.set(run.runId, budget - seconds); if (seconds) { advance(run, seconds); broadcast(run); } } }, 200);
-    const saver = setInterval(() => { for (const run of runs.values()) persist(run).catch(err => console.error('Persistence failed:', err.message)); }, 10000); 
+    const saver = setInterval(() => { for (const run of runs.values()) persist(run).catch(err => console.error('Persistence failed:', err.message)); }, 10000);
     const port = Number(process.env.PORT || 4000); await new Promise(resolve => server.listen(port, '0.0.0.0', resolve)); console.log(`VEIL simulation service http://0.0.0.0:${port}`);
-    const close = async () => { 
+    const close = async () => {
         clearInterval(ticker);
-         clearInterval(saver);
-          for (const run of runs.values()) await persist(run); 
-          await closeStorage(); wss.close(); server.close(); }; 
-          process.once('SIGTERM', () => close().finally(() => process.exit(0))); process.once('SIGINT', () => close().finally(() => process.exit(0))); 
-          return { server, close, runs };
+        clearInterval(saver);
+        for (const run of runs.values()) await persist(run);
+        await closeStorage(); wss.close(); server.close();
+    };
+    process.once('SIGTERM', () => close().finally(() => process.exit(0))); process.once('SIGINT', () => close().finally(() => process.exit(0)));
+    return { server, close, runs };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) startServer().catch(error => { console.error(error); process.exitCode = 1; });
