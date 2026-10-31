@@ -129,8 +129,7 @@ input::placeholder {
     flex-direction: column;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: #304538 transparent;
+    scrollbar-width: none;
     z-index: 20
 }
 
@@ -139,15 +138,21 @@ input::placeholder {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: #304538 transparent
+    scrollbar-width: none
+}
+
+.sidebar::-webkit-scrollbar,
+.sidebar-nav::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none
 }
 
 .brand {
     display: flex;
     gap: 10px;
     align-items: center;
-    padding: 0 13px 30px;
+    padding: 0 13px 22px;
     color: #adeccc
 }
 
@@ -176,7 +181,7 @@ input::placeholder {
     align-items: center;
     padding: 11px 9px;
     font-size: 10.5px;
-    margin-bottom: 29px
+    margin-bottom: 20px
 }
 
 .workspace-chip small {
@@ -208,24 +213,24 @@ input::placeholder {
     font-weight: 600;
     letter-spacing: 1.5px;
     padding: 0 12px;
-    margin-bottom: 12px
+    margin-bottom: 7px
 }
 
 .nav-label.second {
-    margin-top: 32px
+    margin-top: 16px
 }
 
 .nav-item {
     display: flex;
-    gap: 12px;
+    gap: 11px;
     width: 100%;
-    padding: 12px 12px;
+    padding: 7px 11px;
     color: #8c99a7;
     align-items: center;
     font-size: 11px;
     border-radius: 6px;
-    margin-bottom: 5px;
-    min-height: 42px;
+    margin-bottom: 2px;
+    min-height: 30px;
     text-align: left
 }
 
@@ -238,7 +243,7 @@ input::placeholder {
     color: #b0ebca;
     background: linear-gradient(90deg, #1b2d29, #18251f);
     border: 1px solid #304238;
-    padding: 11px
+    padding: 6px 10px
 }
 
 .nav-item svg {
@@ -279,8 +284,8 @@ input::placeholder {
 }
 
 .research-note {
-    margin: 30px 7px 21px;
-    padding: 16px 13px;
+    margin: 16px 5px 12px;
+    padding: 12px 12px;
     border: 1px solid #27302f;
     border-radius: 8px;
     background: radial-gradient(ellipse at 0 0, #17261f, transparent 70%), #10171c
@@ -296,11 +301,11 @@ input::placeholder {
 }
 
 .research-note p {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
-    margin: 14px 0;
+    margin: 9px 0;
     color: #c9d5d0;
-    line-height: 1.7
+    line-height: 1.55
 }
 
 .research-note button {
@@ -312,8 +317,8 @@ input::placeholder {
 }
 
 .operator {
-    margin-top: 15px;
-    padding: 20px 0;
+    margin-top: 9px;
+    padding: 14px 0;
     display: flex;
     gap: 9px;
     border-top: 1px solid #202832;
@@ -4820,7 +4825,7 @@ input::placeholder {
 @media(max-width:900px){.fleet-orbit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.docking-panel{align-items:flex-start;flex-direction:column}}
 @media(max-width:520px){.fleet-orbit-grid{grid-template-columns:1fr}.fleet-operations{padding:16px}}
 
-@media(max-height:600px) {
+@media(max-height:648px) {
     .research-note {
         display: none
     }
