@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { scenarios, faultModels } from './catalog.js';
-import { makeRun, snapshot, control, injectFault, advance, checkpoint, exportRun, importRun, experiment, SimulationError, validateMutation, completeMutation } from './engine.js';
+import { makeRun, snapshot, control, injectFault, advance, checkpoint, exportRun, importRun, experiment, SimulationError, validateMutation, completeMutation, telemetryCatalog, telemetrySeries } from './engine.js';
 import { connectStorage, storageLabel, saveRun, loadRuns, closeStorage } from './storage.js';
 try { process.loadEnvFile?.(); } catch { }
 
@@ -57,6 +57,43 @@ app.get('/api/v1/runs/:id/decisions', (req, res) => res.json(findRun(req.params.
 app.get('/api/v1/runs/:id/contracts', (req, res) => res.json(findRun(req.params.id).contracts));
 app.get('/api/v1/runs/:id/connections', (req, res) => res.json(findRun(req.params.id).connections));
 app.get('/api/v1/runs/:id/events', (req, res) => { const run = findRun(req.params.id); let rows = run.events; if (req.query.spacecraftId) rows = rows.filter(x => x.spacecraftId === req.query.spacecraftId); if (req.query.type) rows = rows.filter(x => x.type.includes(req.query.type)); if (req.query.severity) rows = rows.filter(x => x.severity === req.query.severity); const offset = Math.max(0, Number(req.query.offset) || 0), limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 100)); res.json({ events: rows.slice(offset, offset + limit), total: rows.length, nextOffset: offset + limit < rows.length ? offset + limit : null }); });
+// Telemetry catalog: what can be plotted, including parameters this model does
+// not implement, so the workspace can show them as unavailable.
+app.get('/api/v1/runs/:id/telemetry', (req, res) => { res.json(telemetryCatalog(findRun(req.params.id))); });
+
+// Series data. Keys are "<ownerId>|<parameterId>", comma separated or repeated.
+app.get('/api/v1/runs/:id/telemetry/series', (req, res) => {
+    const run = findRun(req.params.id);
+    const raw = req.query.keys ?? req.query.key ?? '';
+    const keys = (Array.isArray(raw) ? raw : String(raw).split(',')).map(k => k.trim()).filter(Boolean);
+    if (!keys.length) throw new SimulationError('INVALID_PARAMETER', 'Provide at least one series key as keys=<ownerId>|<parameterId>.');
+    if (keys.length > 24) throw new SimulationError('INVALID_PARAMETER', 'At most 24 series can be requested at once.');
+    const from = req.query.from === undefined ? -Infinity : Number(req.query.from);
+    const to = req.query.to === undefined ? Infinity : Number(req.query.to);
+    if (Number.isNaN(from) || Number.isNaN(to)) throw new SimulationError('INVALID_PARAMETER', 'from and to must be numeric simulation seconds.');
+    res.json({ runId: run.runId, revision: run.revision, time: run.time, series: telemetrySeries(run, keys, { from, to }) });
+});
+
+// CSV export of the selected series, long format so one row is one measurement.
+app.get('/api/v1/runs/:id/telemetry/export.csv', (req, res) => {
+    const run = findRun(req.params.id);
+    const raw = req.query.keys ?? req.query.key ?? '';
+    const keys = (Array.isArray(raw) ? raw : String(raw).split(',')).map(k => k.trim()).filter(Boolean);
+    if (!keys.length) throw new SimulationError('INVALID_PARAMETER', 'Provide at least one series key to export.');
+    const series = telemetrySeries(run, keys);
+    const escape = value => value === null || value === undefined ? '' : /[",\n]/.test(String(value)) ? '"' + String(value).replaceAll('"', '""') + '"' : String(value);
+    const lines = ['run_id,scenario_id,seed,simulation_time_s,owner_id,owner_kind,spacecraft_id,parameter_id,value,unit,classification'];
+    for (const entry of series) {
+        if (!entry.available) continue;
+        for (const [time, value] of entry.points) {
+            lines.push([run.runId, run.scenarioId, run.seed, time, entry.ownerId, entry.ownerKind, entry.spacecraftId ?? '', entry.parameterId, value, entry.unit, entry.classification].map(escape).join(','));
+        }
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="veil-${run.scenarioId}-telemetry.csv"`);
+    res.send(lines.join('\n'));
+});
+
 app.post('/api/v1/runs/:id/checkpoints', asyncRoute(async (req, res) => { const run = findRun(req.params.id); const check = validateMutation(run, req.body); if (check.duplicate) { res.json(snapshot(run)); return; } const point = checkpoint(run, req.body.name); completeMutation(run, check.key, { checkpointId: point.id }); await persist(run); broadcast(run); res.status(201).json({ ...snapshot(run), checkpoint: point }); }));
 app.post('/api/v1/runs/:id/checkpoints/:checkpointId/restore', mutate((run, body, params) => control(run, { ...body, action: 'load_checkpoint', value: params.checkpointId })));
 app.get('/api/v1/exports/:runId', (req, res) => { const run = findRun(req.params.runId); res.setHeader('Content-Disposition', `attachment; filename="VEIL-${run.scenarioId}-${Math.floor(run.time)}s.json"`); res.json(exportRun(run)); });

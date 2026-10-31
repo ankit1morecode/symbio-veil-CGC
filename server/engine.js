@@ -3,12 +3,14 @@ import {scenarios, faultModels, createSpacecraft, manifests} from './catalog.js'
 import {MODEL_VERSION, clamp, norm, sub, propagateOrbit, inEclipse, linkGeometry, thermalAt, exponentialWait, weibullWait, nextRandom} from './physics.js';
 import {initializeCommunications, updateCommunications, communicationSnapshot} from './communications.js';
 import {boardSafety, faultEngineSummary} from './board-safety.js';
+import {initializeTelemetry, sampleTelemetry, recordTelemetry, truncateTelemetry, telemetryCatalog, telemetrySeries} from './telemetry.js';
 import {weights, normalization, agentView, candidate, planningContext, rankCandidates, viewPriority, consent, viewConfidence} from './planner.js';
 export class SimulationError extends Error { constructor(code,message,status=400){super(message);this.code=code;this.status=status;} }
 const fail=(code,message,status)=>{throw new SimulationError(code,message,status)};
 const copy=o=>structuredClone(o);
 const hash=o=>createHash('sha256').update(JSON.stringify(o)).digest('hex');
 const validModes=['HYBRID','MANUAL','AUTOMATIC'];
+export {telemetryCatalog, telemetrySeries};
 export {weights};
 const CONSERVATION_TOLERANCE_WH=1e-9;
 // Separation is a commanded impulse with a propellant cost, not a free state
@@ -24,7 +26,7 @@ export function makeRun(options={}) {
  const scenario=scenarios.find(x=>x.id===(options.scenarioId||options.scenario_id||'VEIL-REF-01'));
  if(!scenario) fail('INVALID_PARAMETER','Unknown scenario. Choose VEIL-REF-01 or E0–E6.');
  const seed=Number(options.seed??20261029); if(!Number.isInteger(seed)||seed<0||seed>4294967295) fail('INVALID_PARAMETER','Seed must be an unsigned 32-bit integer.');
- if(options.hazardModel&&!['EXPONENTIAL','WEIBULL'].includes(options.hazardModel))fail('INVALID_PARAMETER','Hazard model must be EXPONENTIAL or WEIBULL.');if(options.hazardModel==='WEIBULL'){numeric(options.weibullBeta,'Weibull beta',.001,100);numeric(options.weibullEtaHours,'Weibull etaHours',.001,1e9);}if(options.hazardPerNodeHour!==undefined)numeric(options.hazardPerNodeHour,'Hazard per node-hour',0,1000);
+ if(options.hazardModel&&!['EXPONENTIAL','WEIBULL'].includes(options.hazardModel))fail('INVALID_PARAMETER','Hazard model must be EXPONENTIAL or WEIBULL.');if(options.hazardModel==='WEIBULL'){numeric(options.weibullBeta,'Weibull beta',.001,100);numeric(options.weibullEtaHours,'Weibull etaHours',.001,1e9);}if(options.hazardPerNodeHour!==undefined)numeric(options.hazardPerNodeHour,'Hazard per node-hour',0,1000);if(options.sampleIntervalS!==undefined)numeric(options.sampleIntervalS,'Telemetry sample interval',1,3600);if(options.telemetryMaxPoints!==undefined)numeric(options.telemetryMaxPoints,'Telemetry history depth',10,20000);
  const count=Number(options.spacecraftCount||options.spacecraft_count||2);if(!Number.isInteger(count)||count<2||count>10)fail('INVALID_PARAMETER','Spacecraft count must be an integer between 2 and 10.');
  const manifestId=options.manifestId||options.manifest_id||'OSV-REF';if(!manifests[manifestId])fail('INVALID_PARAMETER',`Unknown manifest. Choose ${Object.keys(manifests).join(' or ')}.`);
  const policy=options.policyId||options.policy_id||'B3'; if(!['B0','B1','B2','B3'].includes(policy))fail('INVALID_PARAMETER','Policy must be B0, B1, B2 or B3.');
@@ -33,7 +35,8 @@ export function makeRun(options={}) {
  const initRng=streamState(run,'scenario'),phaseJitter=(nextRandom(initRng)-.5)*.2,raanJitter=(nextRandom(initRng)-.5)*.15;for(const sat of run.spacecraft){sat.orbit.phase+=phaseJitter;sat.orbit.raan+=raanJitter;Object.assign(sat,propagateOrbit(sat.orbit,0));sat.navPosition=[...sat.position];sat.navVelocity=[...sat.velocity];sat.navAt=0;sat.eclipse=inEclipse(sat.position);sat.solarW=sat.eclipse?0:(sat.availableSolarW??20);scheduleHazards(run,sat);}
  if(scenario.fault) enqueue(run,{kind:'fault',at:20,spacecraftId:'SAT-A',componentId:`SAT-A-${scenario.fault==='F-01'?'alpha':'solar'}`,modelId:scenario.fault,origin:'SCENARIO_AUTO',parameters:{},duration:'PERMANENT'});
  event(run,'RUN_CREATED','info',null,`Loaded ${scenario.id} · ${scenario.name}. All reference parameters are synthetic.`);
- initializeCommunications(run);run.initialState=copy({...run,initialState:undefined}); return run;
+ initializeCommunications(run);initializeTelemetry(run,{sampleIntervalS:options.sampleIntervalS,maxPoints:options.telemetryMaxPoints});recordTelemetry(run,'INIT');
+ run.initialState=copy({...run,initialState:undefined,telemetry:undefined}); return run;
 }
 function id(run,prefix='EVT'){return `${prefix}-${String(++run.eventCounter).padStart(6,'0')}`;}
 export function event(run,type,severity,spacecraftId,message,extra={}) {const entry={id:id(run),schemaVersion:'1.0',time:run.time,type,severity,spacecraftId,message,sequence:++run.sequence,...extra};run.events.push(entry);return entry;}
@@ -72,7 +75,7 @@ export function completeMutation(run,key,metadata={}){run.revision++;run.lastCom
 export function control(run,payload){const check=validateMutation(run,payload);if(check.duplicate)return snapshot(run);const action=payload.action;
  switch(action){case 'play':run.playing=true;break;case 'pause':run.playing=false;break;case 'step':advance(run,numeric(payload.seconds??payload.value??10,'Step seconds',.001,86400));break;case 'time_scale':run.timeScale=numeric(payload.value??payload.timeScale,'Time scale',1,100);break;
  case 'fault_mode':{const mode=payload.value??payload.faultMode;if(!validModes.includes(mode))fail('INVALID_PARAMETER','Choose HYBRID, MANUAL or AUTOMATIC.');const enabled=mode!=='MANUAL';if(enabled&&!run.config.spontaneousEnabled){for(const q of run.queue.filter(x=>x.kind==='fault'&&x.origin==='STOCHASTIC'))q.at=run.time+hazardWait(run);run.queue.sort((a,b)=>a.at-b.at);}run.faultMode=mode;run.config.spontaneousEnabled=enabled;event(run,'FAULT_MODE','info',null,`${mode} selected; existing physical faults remain active.`);break;}
- case 'reset':{const fresh=makeRun(run.initialOptions);fresh.runId=run.runId;fresh.revision=run.revision;fresh.lastCommandRevision=run.lastCommandRevision;fresh.commandResults=run.commandResults;Object.assign(run,fresh);break;}
+ case 'reset':{run.telemetry=undefined;const fresh=makeRun(run.initialOptions);fresh.runId=run.runId;fresh.revision=run.revision;fresh.lastCommandRevision=run.lastCommandRevision;fresh.commandResults=run.commandResults;Object.assign(run,fresh);break;}
  case 'load_checkpoint':{const point=run.checkpoints.find(c=>c.id===(payload.value??payload.checkpointId));if(!point)fail('INVALID_PARAMETER','Checkpoint not found.');restoreCheckpoint(run,point);break;}
  case 'release':requestSeparation(run,payload.connectionId||payload.value);break;case 'clear_fault':clearFault(run,payload.faultId||payload.value);break;default:fail('INVALID_PARAMETER',`Unsupported control action: ${action}`);
  }return completeMutation(run,check.key);
@@ -133,7 +136,7 @@ function applyFault(run,q){
  const fault={...q,scheduledS:q.at,activatedS:suppressed?null:run.time,status:suppressed?'SUPPRESSED':'ACTIVE',observationState:'UNKNOWN',diagnosisState:'UNASSESSED',rootId:q.rootId||q.id,parentId:q.parentId||null,schemaVersion:'1.0',provenance:'P2 SYNTHETIC'};const existing=run.faults.findIndex(x=>x.id===q.id);if(existing>=0)run.faults[existing]=fault;else run.faults.push(fault);
  if(q.origin==='STOCHASTIC')enqueue(run,{...q,id:id(run,'Q'),at:run.time+hazardWait(run)});
  if(suppressed){event(run,'FAULT_SUPPRESSED','info',sat.id,`${q.modelId} automatic incident suppressed.`,{rootId:q.id,componentId:comp.id});return;}
- comp.incidents.push(q.id);event(run,'FAULT_ACTIVE','critical',sat.id,`${comp.name}: ${faultModels.find(x=>x.id===q.modelId).effect}`,{rootId:q.id,componentId:comp.id,origin:q.origin});recomputePhysical(run,sat);
+ comp.incidents.push(q.id);recordTelemetry(run,'FAULT');event(run,'FAULT_ACTIVE','critical',sat.id,`${comp.name}: ${faultModels.find(x=>x.id===q.modelId).effect}`,{rootId:q.id,componentId:comp.id,origin:q.origin});recomputePhysical(run,sat);
  if(q.modelId!=='F-12')enqueue(run,{kind:'observe',at:run.time+6,spacecraftId:sat.id,faultId:q.id});
  if(q.duration==='TRANSIENT'||q.duration==='INTERMITTENT')enqueue(run,{kind:'clear',at:run.time+(q.parameters.durationS||60),spacecraftId:sat.id,faultId:q.id});
  if(q.duration==='PROGRESSIVE')enqueue(run,{kind:'progress',at:run.time+(q.parameters.durationS||120),spacecraftId:sat.id,faultId:q.id});
@@ -199,7 +202,7 @@ function revalidateConnection(run,c){
 function capture(run,q){
  const c=run.connections.find(x=>x.id===q.connectionId);if(!c||c.status!=='ACTIVE')return;revalidateConnection(run,c);if(c.status!=='ACTIVE')return;const a=satellite(run,c.participants[0]),b=satellite(run,c.participants[1]);
  if(c.relativeDistanceM>1.1||c.relativeSpeedMps>.1||a.interfaceVersion!==b.interfaceVersion){c.status='ABORTED';c.detachmentReason='CAPTURE_ENVELOPE_FAILED';event(run,'CAPTURE_REJECTED','critical',a.id,'Capture guard rejected relative geometry, speed or interface.');return;}
- c.mechanicalState='CAPTURED';c.captureVerified=true;c.detachmentReason=null;c.dataState='OPERATIONAL';c.powerState='PROTECTED_ACTIVE';c.transferW=10;c.functionalState=c.mode==='C3'?'INTEGRATED':'SYMBIOTIC';c.capturedAt=run.time;
+ recordTelemetry(run,'CAPTURE');c.mechanicalState='CAPTURED';c.captureVerified=true;c.detachmentReason=null;c.dataState='OPERATIONAL';c.powerState='PROTECTED_ACTIVE';c.transferW=10;c.functionalState=c.mode==='C3'?'INTEGRATED':'SYMBIOTIC';c.capturedAt=run.time;
  const masses=[a.dryMassKg+a.propellantKg,b.dryMassKg+b.propellantKg],total=masses[0]+masses[1];c.combinedMassKg=total;c.centerOfMassM=a.position.map((x,i)=>(x*masses[0]+b.position[i]*masses[1])/total);c.combinedInertiaKgm2=a.inertiaKgm2.map((x,i)=>x+b.inertiaKgm2[i]+(i===2?0:total*.2**2));c.controlMarginNm=a.torqueNm+b.torqueNm;
  event(run,'CAPTURE_VERIFIED','success',a.id,`Capture envelope passed; combined mass ${total.toFixed(3)} kg, inertia recomputed. Direct paths independently authorized.`,{contractId:c.contractId});enqueue(run,{kind:'verify',at:run.time+600,connectionId:c.id,spacecraftId:a.id});
 }
@@ -208,7 +211,7 @@ function verify(run,q){
  const valid=run.time<=a.mission.deadline&&(c.mode==='C1'?quality>=.8&&c.dataTransferredMbit>=8:quality>=.8&&c.receivedWh>=1.4166&&a.energyWh>0);const evidence={id:id(run,'EVIDENCE'),time:run.time,quality:c.mode==='C1'?quality:1,deadlinePassed:run.time<=a.mission.deadline,receivedDataMbit:c.dataTransferredMbit,receivedEnergyWh:c.receivedWh,predicatePassed:valid,model:'synthetic deterministic mission artifact/v1'};contract.evidenceRefs.push(evidence);c.verification=evidence;
  if(valid){a.mission.status='ASSISTED';a.mission.assisted=true;a.mission.quality=1;a.mission.availability=1;a.mission.tasks[1]={...a.mission.tasks[1],status:'COMPLETED',provider:b.id,evidenceId:evidence.id,quality:1};a.mission.tasks[2]={...a.mission.tasks[2],status:'COMPLETED',quality:1,evidenceId:evidence.id};run.metrics.missionSuccess++;run.metrics.recoveryTimeS=recoveryTimeFor(run,contract,a);c.status='VERIFIED';contract.status='VERIFIED';const decision=run.decisions.find(x=>x.id===contract.decisionId);if(decision){decision.outcome='VERIFIED EXTERNAL ASSISTANCE';decision.actualCompletionS=run.time-decision.time;decision.forecastErrorS=Number.isFinite(decision.forecastCompletionS)?decision.actualCompletionS-decision.forecastCompletionS:null;}event(run,'MISSION_VERIFIED','success',a.id,'Mission criterion independently verified. External assistance; failed physical component remains failed.',{contractId:contract.id,evidenceId:evidence.id});}
  else{c.status='ABORTED';contract.status='ABORTED';event(run,'VERIFICATION_FAILED','critical',a.id,'Output failed delivered quantity, quality or deadline predicate.',{contractId:contract.id});}
- c.transferW=0;c.powerState='ISOLATED';if(c.mode==='C1'){c.dataState='ISOLATED';c.status=valid?'COMPLETED':'ABORTED';contract.status=c.status;}else enqueue(run,{kind:'separate',at:run.time+(c.mode==='C3'?1800:30),connectionId:c.id,spacecraftId:a.id});
+ recordTelemetry(run,'VERIFY');c.transferW=0;c.powerState='ISOLATED';if(c.mode==='C1'){c.dataState='ISOLATED';c.status=valid?'COMPLETED':'ABORTED';contract.status=c.status;}else enqueue(run,{kind:'separate',at:run.time+(c.mode==='C3'?1800:30),connectionId:c.id,spacecraftId:a.id});
  if(valid&&run.scenario.reciprocalService&&a.id===run.spacecraft[0].id&&!run.contracts.some(x=>x.services.includes('data.relay/v1'))){const reciprocal={mode:'C1',provider:a.id,completionS:64,score:.92};proposeContract(run,b,reciprocal,{id:contract.decisionId});run.contracts.at(-1).services=['data.relay/v1'];event(run,'RECIPROCAL_SERVICE','info',b.id,'Reciprocal radio relay requested from A; failed A processor is not needed for the typed relay service.');}
 }
 export function requestSeparation(run,connectionId){const c=run.connections.find(x=>x.id===connectionId);if(!c)fail('INVALID_PARAMETER','Connection does not exist.');
@@ -217,7 +220,7 @@ function separate(run,q){
  const c=run.connections.find(x=>x.id===q.connectionId);if(!c||c.mechanicalState!=='CAPTURED')return;const a=satellite(run,c.participants[0]),b=satellite(run,c.participants[1]);c.transferW=0;c.powerState='ISOLATED';c.dataState='ISOLATED';const separationPropellantKg=(a.dryMassKg+a.propellantKg)*SEPARATION_IMPULSE_MPS/EFFECTIVE_EXHAUST_MPS;
  const eligible=[a,b].every(s=>s.torqueNm>0&&s.propellantKg>.001&&s.components.find(x=>x.id===`${s.id}-dock`).health==='OPERATIONAL')&&a.propellantKg>=separationPropellantKg;
  if(!eligible){c.safetyState='SAFE_COUPLED';c.detachmentTime=null;c.detachmentReason='NOT DETERMINED · local actuation, release port or control authority unavailable.';event(run,'SAFE_COUPLED','warning',a.id,'Release infeasible; formation remains mechanically coupled with isolated paths.');return;}
- c.mechanicalState='RELEASED';c.functionalState='INDEPENDENT';c.status='COMPLETED';c.detachmentTime=run.time;c.detachmentReason='Controlled release completed; independent propagation resumes.';run.contracts.find(x=>x.id===c.contractId).status='COMPLETED';
+ recordTelemetry(run,'SEPARATION');c.mechanicalState='RELEASED';c.functionalState='INDEPENDENT';c.status='COMPLETED';c.detachmentTime=run.time;c.detachmentReason='Controlled release completed; independent propagation resumes.';run.contracts.find(x=>x.id===c.contractId).status='COMPLETED';
  // The pair is co-located and co-moving at release, so the released vehicle
  // resumes on the formation orbit offset by the standoff distance. The simplified
  // propagator carries no argument of periapsis, so a general post-impulse state
@@ -258,6 +261,7 @@ function advancePhysical(run,dt){
   if(c.powerState==='PROTECTED_ACTIVE'&&c.transferW>0){const remaining=Math.max(0,1.666666666666667-c.exportedWh),exportWh=Math.min(c.transferW*dt/3600,remaining,Math.max(0,b.energyWh-b.reserveWh),Math.max(0,a.capacityWh-a.energyWh)/c.efficiency),received=exportWh*c.efficiency,loss=exportWh-received;audit.exported+=exportWh;audit.received+=received;b.energyWh-=exportWh;a.energyWh+=received;c.exportedWh+=exportWh;c.receivedWh+=received;c.lossWh+=loss;contract.usedEnergyWh=c.exportedWh;ledger(run,b.id,a.id,'power_transfer',exportWh,'Wh',loss,c.contractId,{receivedWh:received});run.metrics.energyExportedWh+=exportWh;run.metrics.energyReceivedWh+=received;run.metrics.transferLossWh+=loss;}
  }
  evaluateThresholds(run,dt);
+ sampleTelemetry(run);
  updateCommunications(run,dt,spacecraftPriority,audit);run.availabilityIntegral+=run.spacecraft.reduce((s,x)=>s+x.mission.availability,0)/run.spacecraft.length*dt;run.metrics.verifiedAvailability=run.metrics.missionAvailability=run.time?run.availabilityIntegral/run.time:1;
  const closing=run.spacecraft.reduce((s,x)=>s+x.energyWh,0),residual=closing-(audit.opening-audit.reclaimed+audit.generated-audit.consumed-audit.spill-audit.exported+audit.received-audit.serviceWh);
  run.energyAudit.lastClosing=closing;run.energyAudit.reclaimed=0;
@@ -282,7 +286,7 @@ export function checkpoint(run,name='Checkpoint'){
  point.eventHead={length:run.events.length,checksum:hash(run.events)};
  // Display trends are chart data, not simulation state: the dossier asks for
  // bounded trends and no render persistence, so they do not ride in every point.
- point.world=copy({...run,checkpoints:[],initialState:undefined,commandResults:{},ledger:[],events:[],spacecraft:run.spacecraft.map(s=>({...s,energyHistory:[],temperatureHistory:[]}))});point.checksum=hash(point.world);run.checkpoints.push(point);if(run.checkpoints.length>100)run.checkpoints.shift();return {id:point.id,name:point.name,time:point.time,checksum:point.checksum};
+ point.world=copy({...run,checkpoints:[],initialState:undefined,commandResults:{},ledger:[],events:[],telemetry:undefined,spacecraft:run.spacecraft.map(s=>({...s,energyHistory:[],temperatureHistory:[]}))});point.checksum=hash(point.world);run.checkpoints.push(point);if(run.checkpoints.length>100)run.checkpoints.shift();return {id:point.id,name:point.name,time:point.time,checksum:point.checksum};
 }
 export function restoreCheckpoint(run,point){
  if(point.schemaVersion!=='1.0')fail('VERSION_MISMATCH','Checkpoint major version incompatible.');if(hash(point.world)!==point.checksum)fail('CHECKSUM_MISMATCH','Checkpoint checksum failed; previous valid run retained.');
@@ -295,7 +299,8 @@ export function restoreCheckpoint(run,point){
   if(hash(prefix)!==point.ledgerHead.checksum)fail('CHECKSUM_MISMATCH','Ledger head does not match this run; previous valid run retained.');
   ledger=[...prefix,...copy(point.ledgerHead.tail)];}
  if(point.eventHead&&hash(events)!==point.eventHead.checksum)fail('CHECKSUM_MISMATCH','Event head does not match this run; previous valid run retained.');
- Object.assign(run,copy(point.world),{runId,revision:rev,lastCommandRevision,commandResults,checkpoints:saved,initialState:initial,playing:false,ledger,events});
+ const telemetry=run.telemetry;Object.assign(run,copy(point.world),{runId,revision:rev,lastCommandRevision,commandResults,checkpoints:saved,initialState:initial,playing:false,ledger,events,telemetry});
+ truncateTelemetry(run,point.time);
  // Operator audit records never consume the deterministic simulation event-ID stream.
  run.events.push({id:`AUDIT-${point.id}-${rev}`,schemaVersion:'1.0',time:run.time,type:'CHECKPOINT_RESTORED',severity:'info',spacecraftId:null,message:`Restored ${point.name}; exact RNG and event queue retained.`,sequence:++run.sequence,auditOnly:true});
 }
