@@ -4,6 +4,7 @@ import { Line, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { healthColor } from './sceneUtils';
 import SceneLabel from './SceneLabel.jsx';
+import WheelScrollGuard from './WheelScrollGuard.jsx';
 
 class TwinBoundary extends Component {
   state = { error: false };
@@ -118,6 +119,7 @@ export function TwinScene({ satellite, selectedComponent, onSelectComponent, exp
     <directionalLight position={[-4, 1, -2]} intensity={2} color="#69a5c9" />
     <SatelliteModel satellite={satellite} selectedComponent={selectedComponent} onSelectComponent={onSelectComponent} exploded={exploded} />
     <gridHelper args={[12, 24, '#223846', '#172633']} position={[0, -1.6, 0]} material-transparent material-opacity={.23} />
+    <WheelScrollGuard />
     <OrbitControls makeDefault enablePan={false} minDistance={3.3} maxDistance={20} enableDamping dampingFactor={.08} rotateSpeed={.5} />
     <FitCamera exploded={exploded} />
   </Canvas></TwinBoundary>;

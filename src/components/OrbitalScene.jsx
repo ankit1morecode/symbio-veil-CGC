@@ -6,6 +6,7 @@ import dayUrl from '../assets/earth-day.jpg';
 import nightUrl from '../assets/earth-night.png';
 import normalUrl from '../assets/earth-normal.jpg';
 import { EARTH_SCENE_RADIUS, getOrbitPoints, healthColor, palette, toScene } from './sceneUtils';
+import WheelScrollGuard from './WheelScrollGuard.jsx';
 import SceneLabel from './SceneLabel.jsx';
 
 class SceneBoundary extends Component {
@@ -154,6 +155,7 @@ export function OrbitalScene({ spacecraft = [], connections = [], communications
       {spacecraft.map((s, i) => <Spacecraft key={s.id || i} satellite={s} index={i} showLabels={showLabels} onSelect={onSelect} focusedId={focusedId} />)}
       <TelemetryLinks spacecraft={spacecraft} communications={communications} time={time} />
       <Connections spacecraft={spacecraft} connections={connections} time={time} onPairSelect={onPairSelect} />
+      <WheelScrollGuard />
       <OrbitControls makeDefault enablePan={false} minDistance={4.9} maxDistance={16} enableDamping dampingFactor={.07} rotateSpeed={.4} zoomSpeed={.65} />
       <CameraFocus focusedId={focusedId} spacecraft={spacecraft} view={view} />
     </Canvas>
