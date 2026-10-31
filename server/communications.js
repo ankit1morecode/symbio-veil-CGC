@@ -96,7 +96,7 @@ function selectLinks(run, state, priorityOf, busy, slotStart) {
 
 // Called once after each physical simulation step, with dt in simulation seconds.
 // Packet counts, data, and energy are accounted only while each pair is eligible.
-export function updateCommunications(run, dt, priorityOf) {
+export function updateCommunications(run, dt, priorityOf, audit = null) {
   const state = initializeCommunications(run);
   if (!state.enabled || !Number.isFinite(dt) || dt <= 0) return state;
   const busy = busySpacecraft(run);
@@ -122,7 +122,11 @@ export function updateCommunications(run, dt, priorityOf) {
     link.dataTransferredMbit += amount;
     state.totalDataMbit += amount;
     if (history) { history.dataMbit += amount; history.lastContactAt = run.time; }
-    for (const sat of [a, b]) { sat.energyWh -= energy; energyLedger(run, sat, energy); }
+    for (const sat of [a, b]) {
+      sat.energyWh -= energy;
+      if (audit) audit.serviceWh += energy;
+      energyLedger(run, sat, energy);
+    }
   }
   // Select the next slot only after accounting for the interval that just ended.
   if (run.time >= state.nextSlotAt - 1e-8) selectLinks(run, state, priorityOf, busy, run.time);
