@@ -6,7 +6,7 @@ Recorded on 29 October 2026 for the `symbio-veil` version 1.0.0 working copy. Th
 
 | Check | Recorded result | Scope |
 |---|---|---|
-| `npm test` / `node --test tests/*.test.js` | PASS — 43 tests, zero failures | 42 functional/numerical tests plus one HTTP/WebSocket/filesystem integration test |
+| `npm test` / `node --test tests/*.test.js` | PASS — 104 tests, zero failures | Functional, numerical, planner-isolation, pair-state, threshold and scoring/replay suites plus one HTTP/WebSocket/filesystem integration test |
 | `npm run build` | PASS on final implementation | 3,131 modules; local textures and production assets emitted. Vite reports a large bundle warning; performance remains unmeasured. |
 | Browser dashboard walkthrough | PASS for the observed local session | Orbital dashboard, local scene and navigation rendered |
 | Component inspection | PASS for the observed local session | Declared component hierarchy and correct solar-component preselection when opening its fault console |
@@ -18,6 +18,8 @@ Recorded on 29 October 2026 for the `symbio-veil` version 1.0.0 working copy. Th
 | Replay import | API PASS / file-picker walkthrough UNVERIFIED | Version/checksum import is covered by automated tests; interface routes a selected local JSON file to the same endpoint. |
 | Final production navigation | PASS for observed session | Fresh :4000 browser switched orbit, twin, cooperation, and orbit with no console errors after replacement of DOM labels with WebGL sprites. |
 | Live MongoDB persistence | NOT EXERCISED | Optional Mongoose path is implemented; recorded integration check uses local filesystem persistence |
+| Backend performance budgets | MEASURED 31 Oct 2026 | RAM and inspector latency pass with wide margin; 100-checkpoint storage is 4.6% over budget. Development machine, not reference hardware. See `docs/performance-measurement.md` |
+| Rendered frame rate | UNVERIFIED | Needs a browser on the reference 4-core / 16 GB / WebGL2 machine |
 
 These browser entries describe a local operator walkthrough, not a cross-browser screenshot campaign or reference-hardware benchmark. Pending entries must not be presented as passed until the corresponding observation is recorded.
 

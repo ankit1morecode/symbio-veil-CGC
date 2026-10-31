@@ -11,11 +11,14 @@ const hash=o=>createHash('sha256').update(JSON.stringify(o)).digest('hex');
 const validModes=['HYBRID','MANUAL','AUTOMATIC'];
 export {weights};
 const CONSERVATION_TOLERANCE_WH=1e-9;
+// Separation is a commanded impulse with a propellant cost, not a free state
+// change. Effective exhaust velocity is a P2 synthetic figure.
+const SEPARATION_IMPULSE_MPS=.02,EFFECTIVE_EXHAUST_MPS=2000,RELEASE_STANDOFF_M=.4;
 // Named deterministic streams. Hazard keeps the historical sequence so seeded
 // schedules are unchanged; scenario covers initialization draws.
 const streamState=(run,name)=>{run.rngStreams??={hazard:run.rng??run.seed??0,scenario:((run.seed??0)^0x9e3779b9)>>>0};
  return {get rng(){return run.rngStreams[name]},set rng(v){run.rngStreams[name]=v;if(name==='hazard')run.rng=v;}};};
-export const LIMITATIONS=['P2 synthetic research demonstrator; no hardware calibration or flight qualification.','Closed-form Keplerian two-body propagation omits J2, drag, radiation pressure and collision prediction.','Proximity guidance is a bounded coorbital relative-motion proxy with explicit speed/acceleration gates; no flight-qualified 6-DOF GNC.','Single-node analytical thermal response and geometric communication windows; no calibrated RF link budget.','Mission evidence is a deterministic synthetic artifact/quality predicate, not real imagery or hardware repair.','Reference UI and memory performance targets have not been measured on reference hardware.'];
+export const LIMITATIONS=['P2 synthetic research demonstrator; no hardware calibration or flight qualification.','Closed-form Keplerian two-body propagation omits J2, drag, radiation pressure and collision prediction.','Proximity guidance is a bounded coorbital relative-motion proxy with explicit speed/acceleration gates; no flight-qualified 6-DOF GNC.','Single-node analytical thermal response and geometric communication windows; no calibrated RF link budget.','Mission evidence is a deterministic synthetic artifact/quality predicate, not real imagery or hardware repair.','Separation is modelled as a declared along-track impulse: the simplified propagator carries no argument of periapsis, so a released vehicle resumes on the formation orbit rather than from an integrated post-impulse state vector.','Reference UI and memory performance targets have not been measured on reference hardware.'];
 export function makeRun(options={}) {
  if(options.schemaVersion&&String(options.schemaVersion).split('.')[0]!=='1'||options.schema_version&&String(options.schema_version).split('.')[0]!=='1')fail('VERSION_MISMATCH','Scenario schema major version must be 1.');
  const scenario=scenarios.find(x=>x.id===(options.scenarioId||options.scenario_id||'VEIL-REF-01'));
@@ -26,7 +29,7 @@ export function makeRun(options={}) {
  const manifestId=options.manifestId||options.manifest_id||'OSV-REF';if(!manifests[manifestId])fail('INVALID_PARAMETER',`Unknown manifest. Choose ${Object.keys(manifests).join(' or ')}.`);
  const policy=options.policyId||options.policy_id||'B3'; if(!['B0','B1','B2','B3'].includes(policy))fail('INVALID_PARAMETER','Policy must be B0, B1, B2 or B3.');
  const faultMode=options.faultMode||'HYBRID';if(!validModes.includes(faultMode))fail('INVALID_PARAMETER','Fault mode must be HYBRID, MANUAL or AUTOMATIC.');
- const run={schemaVersion:'1.0',runId:randomUUID(),revision:0,lastCommandRevision:0,scenarioId:scenario.id,scenario:copy(scenario),seed,policyId:policy,time:0,epoch:'2026-10-29T00:00:00.000Z',playing:false,timeScale:10,faultMode,profile:'P2 SYNTHETIC REFERENCE',rng:seed,rngStreams:{hazard:seed,scenario:(seed^0x9e3779b9)>>>0},manifestId,manifest:{...manifests[manifestId],boards:undefined},spacecraft:Array.from({length:count},(_,i)=>createSpacecraft(i,scenario,manifestId)),events:[],faults:[],decisions:[],contracts:[],connections:[],ledger:[],queue:[],sequence:0,eventCounter:0,commandResults:{},checkpoints:[],metrics:{verifiedAvailability:1,missionAvailability:1,missionSuccess:0,recoveryTimeS:null,energyExportedWh:0,energyReceivedWh:0,transferLossWh:0,dataTransferredMbit:0,propellantUsedKg:0,rejectedCandidates:0,safetyViolations:0,abortedActions:0,unnecessaryDocking:0,conservationResidualWh:0,conservationWorstResidualWh:0,dataLostMbit:0},modelVersion:MODEL_VERSION,limitations:LIMITATIONS,storage:'Local JSON journal',numericalConfig:{orbit:'Closed-form Kepler Newton solve, 12 iterations',resourceStepS:1,eventPrecisionS:.001,thermal:'Analytical constant-coefficient lumped node'},config:{hazardPerNodeHour:options.hazardPerNodeHour??.0002,hazardModel:options.hazardModel||'EXPONENTIAL',weibullBeta:options.weibullBeta,weibullEtaHours:options.weibullEtaHours,spontaneousEnabled:faultMode!=='MANUAL',maxDurationS:86400},availabilityIntegral:0,energyAudit:{lastClosing:null,reclaimed:0},observationLog:[],initialOptions:{scenarioId:scenario.id,seed,spacecraftCount:count,policyId:policy,manifestId,faultMode,hazardModel:options.hazardModel||'EXPONENTIAL',hazardPerNodeHour:options.hazardPerNodeHour??.0002,weibullBeta:options.weibullBeta,weibullEtaHours:options.weibullEtaHours}};
+ const run={schemaVersion:'1.0',runId:randomUUID(),revision:0,lastCommandRevision:0,scenarioId:scenario.id,scenario:copy(scenario),seed,policyId:policy,time:0,epoch:'2026-10-29T00:00:00.000Z',playing:false,timeScale:10,faultMode,profile:'P2 SYNTHETIC REFERENCE',rng:seed,rngStreams:{hazard:seed,scenario:(seed^0x9e3779b9)>>>0},manifestId,manifest:{...manifests[manifestId],boards:undefined},spacecraft:Array.from({length:count},(_,i)=>createSpacecraft(i,scenario,manifestId)),events:[],faults:[],decisions:[],contracts:[],connections:[],ledger:[],queue:[],sequence:0,eventCounter:0,commandResults:{},checkpoints:[],metrics:{verifiedAvailability:1,missionAvailability:1,missionSuccess:0,recoveryTimeS:null,energyExportedWh:0,energyReceivedWh:0,transferLossWh:0,dataTransferredMbit:0,propellantUsedKg:0,rejectedCandidates:0,safetyViolations:0,abortedActions:0,unnecessaryDocking:0,conservationResidualWh:0,conservationWorstResidualWh:0,dataLostMbit:0},modelVersion:MODEL_VERSION,limitations:LIMITATIONS,storage:'Local JSON journal',numericalConfig:{orbit:'Closed-form Kepler Newton solve, 12 iterations',resourceStepS:1,eventPrecisionS:.001,thermal:'Analytical constant-coefficient lumped node'},config:{hazardPerNodeHour:options.hazardPerNodeHour??.0002,hazardModel:options.hazardModel||'EXPONENTIAL',weibullBeta:options.weibullBeta,weibullEtaHours:options.weibullEtaHours,spontaneousEnabled:faultMode!=='MANUAL',maxDurationS:86400},availabilityIntegral:0,thresholdWatches:[],energyAudit:{lastClosing:null,reclaimed:0},observationLog:[],initialOptions:{scenarioId:scenario.id,seed,spacecraftCount:count,policyId:policy,manifestId,faultMode,hazardModel:options.hazardModel||'EXPONENTIAL',hazardPerNodeHour:options.hazardPerNodeHour??.0002,weibullBeta:options.weibullBeta,weibullEtaHours:options.weibullEtaHours}};
  const initRng=streamState(run,'scenario'),phaseJitter=(nextRandom(initRng)-.5)*.2,raanJitter=(nextRandom(initRng)-.5)*.15;for(const sat of run.spacecraft){sat.orbit.phase+=phaseJitter;sat.orbit.raan+=raanJitter;Object.assign(sat,propagateOrbit(sat.orbit,0));sat.navPosition=[...sat.position];sat.navVelocity=[...sat.velocity];sat.navAt=0;sat.eclipse=inEclipse(sat.position);sat.solarW=sat.eclipse?0:(sat.availableSolarW??20);scheduleHazards(run,sat);}
  if(scenario.fault) enqueue(run,{kind:'fault',at:20,spacecraftId:'SAT-A',componentId:`SAT-A-${scenario.fault==='F-01'?'alpha':'solar'}`,modelId:scenario.fault,origin:'SCENARIO_AUTO',parameters:{},duration:'PERMANENT'});
  event(run,'RUN_CREATED','info',null,`Loaded ${scenario.id} · ${scenario.name}. All reference parameters are synthetic.`);
@@ -79,7 +82,51 @@ export function injectFault(run,payload){
  const modelId=payload.modelId||payload.model_id,definition=faultModels.find(x=>x.id===modelId);if(!definition||!comp.faultClasses.includes(modelId))fail('UNSUPPORTED_FAULT',`${modelId} incompatible with ${comp.name}; choose ${comp.faultClasses.join(', ')}.`);
  if(run.faultMode==='AUTOMATIC')fail('INVALID_PARAMETER','Select HYBRID or MANUAL before manual injection.');const at=numeric(payload.activationTime??payload.scheduled_s??run.time,'Activation time',run.time,run.time+86400);
  const duration=payload.duration||'PERMANENT';if(!definition.durationSemantics.includes(duration))fail('INVALID_PARAMETER','Unsupported duration semantics.');const parameters=copy(payload.parameters||{});if(duration==='PROGRESSIVE'&&parameters.effect===undefined)parameters.effect='degraded';if(parameters.durationS!==undefined)numeric(parameters.durationS,'Transient duration',.001,86400);if(parameters.periodS!==undefined)numeric(parameters.periodS,'Intermittent period',.1,86400);if(parameters.cycles!==undefined)numeric(parameters.cycles,'Intermittent cycles',1,100);if(parameters.packetLoss!==undefined){numeric(parameters.packetLoss,'Packet loss fraction',0,1);if(modelId!=='F-05')fail('INVALID_PARAMETER','Packet loss is only defined for F-05 radio faults.');}if(parameters.hazardModel==='WEIBULL'){numeric(parameters.beta,'Weibull beta',.001,100);numeric(parameters.etaHours,'Weibull etaHours',.001,1e9);}if(parameters.effect!==undefined&&!['failed','degraded','bias','freeze'].includes(parameters.effect))fail('INVALID_PARAMETER','Effect must be failed, degraded, bias or freeze.');
+ if(payload.trigger){const watch=armThreshold(run,sat,comp,modelId,duration,parameters,payload.trigger);return completeMutation(run,check.key,{watchId:watch.id});}
  const queued=enqueue(run,{kind:'fault',at,spacecraftId:sat.id,componentId:comp.id,modelId,origin:'MANUAL',duration,parameters:copy(parameters)});run.faults.push({...queued,status:'SCHEDULED',observationState:'UNKNOWN',diagnosisState:'UNASSESSED',rootId:queued.id,parentId:null,provenance:'P2 SYNTHETIC'});event(run,'FAULT_SCHEDULED','warning',sat.id,`${definition.name} ${at<=run.time?'injected now':`scheduled at T+${at.toFixed(1)} s`}.`,{componentId:comp.id,rootId:queued.id});processDue(run);return completeMutation(run,check.key);
+}
+const THRESHOLD_SIGNALS=['temperatureK','observedTemperatureK','energyWh'];
+function armThreshold(run,sat,comp,modelId,duration,parameters,trigger){
+ const signal=trigger.signal;if(!THRESHOLD_SIGNALS.includes(signal))fail('INVALID_PARAMETER',`Threshold signal must be one of ${THRESHOLD_SIGNALS.join(', ')}.`);
+ if(trigger.above===undefined&&trigger.below===undefined)fail('INVALID_PARAMETER','A threshold trigger needs above or below.');
+ if(trigger.above!==undefined)numeric(trigger.above,'Threshold above',-1e9,1e9);
+ if(trigger.below!==undefined)numeric(trigger.below,'Threshold below',-1e9,1e9);
+ const persistenceS=trigger.persistenceS===undefined?0:numeric(trigger.persistenceS,'Threshold persistence',0,86400);
+ const releaseForS=trigger.releaseForS===undefined?null:numeric(trigger.releaseForS,'Threshold release window',0,86400);
+ if(releaseForS!==null&&duration==='PERMANENT')fail('INVALID_PARAMETER','A permanent fault has no release path; use a clearable duration with releaseForS.');
+ if(trigger.releaseAbove!==undefined)numeric(trigger.releaseAbove,'Release above',-1e9,1e9);
+ if(trigger.releaseBelow!==undefined)numeric(trigger.releaseBelow,'Release below',-1e9,1e9);
+ const watch={id:id(run,'WATCH'),spacecraftId:sat.id,componentId:comp.id,modelId,duration,parameters:copy(parameters),
+  signal,above:trigger.above,below:trigger.below,persistenceS,releaseForS,releaseAbove:trigger.releaseAbove,releaseBelow:trigger.releaseBelow,
+  state:'ARMED',heldSinceS:null,releaseSinceS:null,faultId:null,provenance:'P2 SYNTHETIC'};
+ run.thresholdWatches.push(watch);
+ event(run,'THRESHOLD_ARMED','info',sat.id,`${modelId} armed on ${signal} ${watch.above!==undefined?'above '+watch.above:'below '+watch.below} for ${persistenceS} s.`,{componentId:comp.id,watchId:watch.id});
+ return watch;
+}
+const thresholdMet=(watch,value)=>watch.above!==undefined?value>=watch.above:value<=watch.below;
+const releaseMet=(watch,value)=>watch.releaseBelow!==undefined?value<=watch.releaseBelow:watch.releaseAbove!==undefined?value>=watch.releaseAbove:!thresholdMet(watch,value);
+function evaluateThresholds(run,dt){
+ for(const watch of run.thresholdWatches){
+  const sat=run.spacecraft.find(s=>s.id===watch.spacecraftId);if(!sat)continue;const value=sat[watch.signal];if(!Number.isFinite(value))continue;
+  if(watch.state==='ARMED'){
+   if(thresholdMet(watch,value)){watch.heldSinceS??=run.time-dt;
+    if(run.time-watch.heldSinceS>=watch.persistenceS-1e-9){
+     const queued=enqueue(run,{kind:'fault',at:run.time,spacecraftId:sat.id,componentId:watch.componentId,modelId:watch.modelId,origin:'THRESHOLD',duration:watch.duration,parameters:copy(watch.parameters)});
+     watch.state='TRIPPED';watch.faultId=queued.id;watch.releaseSinceS=null;
+     event(run,'THRESHOLD_TRIPPED','warning',sat.id,`${watch.signal} held ${watch.above!==undefined?'above '+watch.above:'below '+watch.below} for ${watch.persistenceS} s; ${watch.modelId} triggered.`,{componentId:watch.componentId,watchId:watch.id,rootId:queued.id});
+    }
+   }else watch.heldSinceS=null;
+  }else if(watch.state==='TRIPPED'&&watch.releaseForS!==null){
+   if(releaseMet(watch,value)){watch.releaseSinceS??=run.time-dt;
+    if(run.time-watch.releaseSinceS>=watch.releaseForS-1e-9){
+     const fault=run.faults.find(f=>f.id===watch.faultId&&f.status==='ACTIVE');
+     if(fault)clearFault(run,fault.id);
+     watch.state='ARMED';watch.heldSinceS=null;watch.releaseSinceS=null;watch.faultId=null;
+     event(run,'THRESHOLD_RELEASED','success',sat.id,`${watch.signal} stayed clear for ${watch.releaseForS} s; ${watch.modelId} released and re-armed.`,{componentId:watch.componentId,watchId:watch.id});
+    }
+   }else watch.releaseSinceS=null;
+  }
+ }
 }
 function applyFault(run,q){
  if(run.faults.some(x=>x.id===q.id&&x.status!=='SCHEDULED'))return;const sat=satellite(run,q.spacecraftId),comp=component(sat,q.componentId);const suppressed=q.origin!=='MANUAL'&&run.faultMode==='MANUAL';
@@ -167,9 +214,19 @@ function verify(run,q){
 export function requestSeparation(run,connectionId){const c=run.connections.find(x=>x.id===connectionId);if(!c)fail('INVALID_PARAMETER','Connection does not exist.');
  const owning=run.contracts.find(x=>x.id===c.contractId);if(owning&&['REJECTED','EXPIRED'].includes(owning.status))fail('CONTRACT_CONFLICT',`Contract ${owning.id} is ${owning.status.toLowerCase()}; it cannot command a release.`,409);if(c.mode==='C1'){c.status='COMPLETED';c.dataState='ISOLATED';run.contracts.find(x=>x.id===c.contractId).status='COMPLETED';return;}if(c.mechanicalState!=='CAPTURED')fail('FEASIBILITY_REJECTED','Only captured formations can execute controlled release.');separate(run,{connectionId});}
 function separate(run,q){
- const c=run.connections.find(x=>x.id===q.connectionId);if(!c||c.mechanicalState!=='CAPTURED')return;const a=satellite(run,c.participants[0]),b=satellite(run,c.participants[1]);c.transferW=0;c.powerState='ISOLATED';c.dataState='ISOLATED';const eligible=[a,b].every(s=>s.torqueNm>0&&s.propellantKg>.001&&s.components.find(x=>x.id===`${s.id}-dock`).health==='OPERATIONAL');
+ const c=run.connections.find(x=>x.id===q.connectionId);if(!c||c.mechanicalState!=='CAPTURED')return;const a=satellite(run,c.participants[0]),b=satellite(run,c.participants[1]);c.transferW=0;c.powerState='ISOLATED';c.dataState='ISOLATED';const separationPropellantKg=(a.dryMassKg+a.propellantKg)*SEPARATION_IMPULSE_MPS/EFFECTIVE_EXHAUST_MPS;
+ const eligible=[a,b].every(s=>s.torqueNm>0&&s.propellantKg>.001&&s.components.find(x=>x.id===`${s.id}-dock`).health==='OPERATIONAL')&&a.propellantKg>=separationPropellantKg;
  if(!eligible){c.safetyState='SAFE_COUPLED';c.detachmentTime=null;c.detachmentReason='NOT DETERMINED · local actuation, release port or control authority unavailable.';event(run,'SAFE_COUPLED','warning',a.id,'Release infeasible; formation remains mechanically coupled with isolated paths.');return;}
- c.mechanicalState='RELEASED';c.functionalState='INDEPENDENT';c.status='COMPLETED';c.detachmentTime=run.time;c.detachmentReason='Controlled release completed; independent propagation resumes.';run.contracts.find(x=>x.id===c.contractId).status='COMPLETED';a.orbit={...b.orbit,phase:b.orbit.phase+.4/b.orbit.radius};a.releaseDriftStart=run.time;a.releaseDriftSpeed=.02;event(run,'SEPARATION_COMPLETE','success',a.id,'Interfaces isolated, finite retreat impulse applied; independent propagation resumed.',{contractId:c.contractId});
+ c.mechanicalState='RELEASED';c.functionalState='INDEPENDENT';c.status='COMPLETED';c.detachmentTime=run.time;c.detachmentReason='Controlled release completed; independent propagation resumes.';run.contracts.find(x=>x.id===c.contractId).status='COMPLETED';
+ // The pair is co-located and co-moving at release, so the released vehicle
+ // resumes on the formation orbit offset by the standoff distance. The simplified
+ // propagator carries no argument of periapsis, so a general post-impulse state
+ // vector cannot be expressed as elements here; the impulse is modelled as the
+ // along-track drift below and charged against propellant.
+ a.propellantKg-=separationPropellantKg;run.metrics.propellantUsedKg+=separationPropellantKg;
+ ledger(run,a.id,'separation-impulse','propellant',separationPropellantKg,'kg',0,c.contractId,{deltaVMps:SEPARATION_IMPULSE_MPS});
+ c.separationDeltaVMps=SEPARATION_IMPULSE_MPS;c.separationPropellantKg=separationPropellantKg;
+ a.orbit={...b.orbit,phase:b.orbit.phase+RELEASE_STANDOFF_M/b.orbit.radius};a.releaseDriftStart=run.time;a.releaseDriftSpeed=SEPARATION_IMPULSE_MPS;event(run,'SEPARATION_COMPLETE','success',a.id,'Interfaces isolated, finite retreat impulse applied; independent propagation resumed.',{contractId:c.contractId});
 }
 function advancePhysical(run,dt){
  // Every path that moves stored energy in this tick reports into `audit`, so the
@@ -200,6 +257,7 @@ function advancePhysical(run,dt){
   if(c.mode==='C1'){const loss=Math.max(a.packetLoss||0,b.packetLoss||0),remaining=8-c.dataTransferredMbit,attempted=Math.min(Math.max(0,remaining)/Math.max(1e-9,1-loss),Math.min(a.radioKbps,b.radioKbps)*dt/1000),bits=attempted*(1-loss);c.dataTransferredMbit+=bits;c.packetLoss=loss;c.lostMbit=(c.lostMbit||0)+(attempted-bits);contract.usedDataMbit=c.dataTransferredMbit;run.metrics.dataTransferredMbit+=bits;run.metrics.dataLostMbit=(run.metrics.dataLostMbit||0)+(attempted-bits);if(attempted>0){ledger(run,b.id,a.id,'data',bits,'Mbit',attempted-bits,c.contractId);const energy=.15*attempted/8;audit.serviceWh+=Math.min(energy,b.energyWh);b.energyWh=Math.max(0,b.energyWh-energy);ledger(run,b.id,'radio-compute','service_energy',energy,'Wh',0,c.contractId);}}
   if(c.powerState==='PROTECTED_ACTIVE'&&c.transferW>0){const remaining=Math.max(0,1.666666666666667-c.exportedWh),exportWh=Math.min(c.transferW*dt/3600,remaining,Math.max(0,b.energyWh-b.reserveWh),Math.max(0,a.capacityWh-a.energyWh)/c.efficiency),received=exportWh*c.efficiency,loss=exportWh-received;audit.exported+=exportWh;audit.received+=received;b.energyWh-=exportWh;a.energyWh+=received;c.exportedWh+=exportWh;c.receivedWh+=received;c.lossWh+=loss;contract.usedEnergyWh=c.exportedWh;ledger(run,b.id,a.id,'power_transfer',exportWh,'Wh',loss,c.contractId,{receivedWh:received});run.metrics.energyExportedWh+=exportWh;run.metrics.energyReceivedWh+=received;run.metrics.transferLossWh+=loss;}
  }
+ evaluateThresholds(run,dt);
  updateCommunications(run,dt,spacecraftPriority,audit);run.availabilityIntegral+=run.spacecraft.reduce((s,x)=>s+x.mission.availability,0)/run.spacecraft.length*dt;run.metrics.verifiedAvailability=run.metrics.missionAvailability=run.time?run.availabilityIntegral/run.time:1;
  const closing=run.spacecraft.reduce((s,x)=>s+x.energyWh,0),residual=closing-(audit.opening-audit.reclaimed+audit.generated-audit.consumed-audit.spill-audit.exported+audit.received-audit.serviceWh);
  run.energyAudit.lastClosing=closing;run.energyAudit.reclaimed=0;
@@ -209,15 +267,35 @@ function advancePhysical(run,dt){
 function addLedgerAggregate(run,sat,dest,amount,type){if(amount===0)return;const bucket=Math.floor(run.time/60),key=`${sat.id}-${type}-${bucket}`,last=run.ledger.findLast(x=>x.aggregateKey===key);if(last){last.amount+=amount;last.throughTime=run.time;}else ledger(run,type==='generation'?'sun':sat.id,type==='generation'?sat.id:dest,type,amount,'Wh',0,null,{aggregateKey:key,throughTime:run.time});}
 function processDue(run){if(run.queue.length&&run.queue[0].at<=run.time+1e-8)run.queue.sort((a,b)=>queueOrder(run,a,b));let count=0;while(run.queue.length&&run.queue[0].at<=run.time+1e-8){if(++count>10000)fail('MODEL_INVALID','Event queue loop detected.');const q=run.queue.shift();switch(q.kind){case 'replan':if(!satellite(run,q.spacecraftId).mission.assisted)plan(run,q.spacecraftId);break;case 'fault':applyFault(run,q);break;case 'observe':observeFault(run,q);break;case 'clear':clearFault(run,q.faultId);break;case 'progress':{const f=run.faults.find(x=>x.id===q.faultId);if(f&&f.status==='ACTIVE'){f.parameters.effect='failed';recomputePhysical(run,satellite(run,f.spacecraftId));enqueue(run,{kind:'observe',at:run.time+6,spacecraftId:f.spacecraftId,faultId:f.id});}break;}case 'contract':transitionContract(run,q);break;case 'capture':capture(run,q);break;case 'verify':verify(run,q);break;case 'separate':separate(run,q);break;}}}
 export function advance(run,seconds){if(!Number.isFinite(seconds)||seconds<0)fail('INVALID_PARAMETER','Advance seconds must be nonnegative and finite.');if(!Number.isInteger(run.lastCommandRevision)||run.lastCommandRevision<0||run.lastCommandRevision>run.revision)run.lastCommandRevision=run.revision;const target=Math.min(run.time+seconds,run.config.maxDurationS);processDue(run);while(run.time<target-1e-8){let dt=Math.min(1,target-run.time);if(run.queue.length&&run.queue[0].at>run.time)dt=Math.min(dt,run.queue[0].at-run.time);if(run.communications?.enabled&&run.communications.nextSlotAt>run.time+1e-8)dt=Math.min(dt,run.communications.nextSlotAt-run.time);run.time=Math.round((run.time+dt)*1e9)/1e9;advancePhysical(run,dt);processDue(run);}if(run.time>=run.config.maxDurationS)run.playing=false;run.revision++;return run;}
-export function snapshot(run){return {schemaVersion:run.schemaVersion,runId:run.runId,revision:run.revision,scenarioId:run.scenarioId,scenario:run.scenario,seed:run.seed,policyId:run.policyId,manifestId:run.manifestId,manifest:run.manifest,manifests:Object.values(manifests).map(m=>({id:m.id,classId:m.classId,version:m.version,description:m.description})),time:run.time,epoch:run.epoch,playing:run.playing,timeScale:run.timeScale,faultMode:run.faultMode,profile:run.profile,spacecraft:run.spacecraft.map(s=>({...copy(s),priority:spacecraftPriority(run,s),boardSafety:boardSafety(run,s),observedBoardSafety:boardSafety(run,s,true)})),events:copy(run.events.slice(-300)),faults:copy(run.faults),decisions:copy(run.decisions.slice(-30)),contracts:copy(run.contracts),connections:copy(run.connections),communications:communicationSnapshot(run),metrics:copy(run.metrics),storage:run.storage,modelVersion:run.modelVersion,limitations:run.limitations,sequence:run.sequence,checkpoints:run.checkpoints.map(c=>({id:c.id,name:c.name,time:c.time,checksum:c.checksum})),ledger:copy(run.ledger.slice(-100)),faultModels,faultEngine:faultEngineSummary(run)};}
+export function snapshot(run){return {schemaVersion:run.schemaVersion,runId:run.runId,revision:run.revision,scenarioId:run.scenarioId,scenario:run.scenario,seed:run.seed,policyId:run.policyId,manifestId:run.manifestId,manifest:run.manifest,manifests:Object.values(manifests).map(m=>({id:m.id,classId:m.classId,version:m.version,description:m.description})),time:run.time,epoch:run.epoch,playing:run.playing,timeScale:run.timeScale,faultMode:run.faultMode,profile:run.profile,spacecraft:run.spacecraft.map(s=>({...copy(s),priority:spacecraftPriority(run,s),boardSafety:boardSafety(run,s),observedBoardSafety:boardSafety(run,s,true)})),events:copy(run.events.slice(-300)),faults:copy(run.faults),decisions:copy(run.decisions.slice(-30)),contracts:copy(run.contracts),connections:copy(run.connections),communications:communicationSnapshot(run),metrics:copy(run.metrics),storage:run.storage,modelVersion:run.modelVersion,limitations:run.limitations,sequence:run.sequence,checkpoints:run.checkpoints.map(c=>({id:c.id,name:c.name,time:c.time,checksum:c.checksum})),ledger:copy(run.ledger.slice(-100)),faultModels,faultEngine:faultEngineSummary(run),thresholdWatches:copy(run.thresholdWatches||[])};}
 export function checkpoint(run,name='Checkpoint'){
  const point={id:id(run,'CP'),name:String(name).slice(0,80),schemaVersion:'1.0',time:run.time};
  event(run,'CHECKPOINT_SAVED','success',null,`${point.name} saved at T+${run.time.toFixed(1)} s.`);
- point.world=copy({...run,checkpoints:[],initialState:undefined,commandResults:{}});point.checksum=hash(point.world);run.checkpoints.push(point);if(run.checkpoints.length>100)run.checkpoints.shift();return {id:point.id,name:point.name,time:point.time,checksum:point.checksum};
+ // Aggregate rows for the open minute bucket are still accumulating, so only the
+ // frozen prefix can be checksummed. The mutable tail is stored in full; it is a
+ // few rows per spacecraft, not the whole log.
+ const totals=(rows,key)=>rows.reduce((sum,row)=>sum+(Number(row[key])||0),0);
+ const tailSize=Math.min(run.ledger.length,6*run.spacecraft.length+16);
+ const cut=run.ledger.length-tailSize;
+ point.ledgerHead={length:run.ledger.length,cut,checksum:hash(run.ledger.slice(0,cut)),tail:copy(run.ledger.slice(cut)),
+  amount:totals(run.ledger,'amount'),losses:totals(run.ledger,'losses')};
+ point.eventHead={length:run.events.length,checksum:hash(run.events)};
+ // Display trends are chart data, not simulation state: the dossier asks for
+ // bounded trends and no render persistence, so they do not ride in every point.
+ point.world=copy({...run,checkpoints:[],initialState:undefined,commandResults:{},ledger:[],events:[],spacecraft:run.spacecraft.map(s=>({...s,energyHistory:[],temperatureHistory:[]}))});point.checksum=hash(point.world);run.checkpoints.push(point);if(run.checkpoints.length>100)run.checkpoints.shift();return {id:point.id,name:point.name,time:point.time,checksum:point.checksum};
 }
 export function restoreCheckpoint(run,point){
  if(point.schemaVersion!=='1.0')fail('VERSION_MISMATCH','Checkpoint major version incompatible.');if(hash(point.world)!==point.checksum)fail('CHECKSUM_MISMATCH','Checkpoint checksum failed; previous valid run retained.');
- const saved=run.checkpoints,runId=run.runId,initial=run.initialState,rev=run.revision,lastCommandRevision=run.lastCommandRevision,commandResults=run.commandResults;Object.assign(run,copy(point.world),{runId,revision:rev,lastCommandRevision,commandResults,checkpoints:saved,initialState:initial,playing:false});
+ const saved=run.checkpoints,runId=run.runId,initial=run.initialState,rev=run.revision,lastCommandRevision=run.lastCommandRevision,commandResults=run.commandResults;
+ // Rewind the append-only logs to the head this checkpoint recorded. Rows above
+ // the head are the future being discarded; the head's checksum proves the rest
+ // is the same log the checkpoint was taken from.
+ let ledger=run.ledger;const events=run.events.slice(0,point.eventHead?.length??run.events.length);
+ if(point.ledgerHead){const prefix=run.ledger.slice(0,point.ledgerHead.cut);
+  if(hash(prefix)!==point.ledgerHead.checksum)fail('CHECKSUM_MISMATCH','Ledger head does not match this run; previous valid run retained.');
+  ledger=[...prefix,...copy(point.ledgerHead.tail)];}
+ if(point.eventHead&&hash(events)!==point.eventHead.checksum)fail('CHECKSUM_MISMATCH','Event head does not match this run; previous valid run retained.');
+ Object.assign(run,copy(point.world),{runId,revision:rev,lastCommandRevision,commandResults,checkpoints:saved,initialState:initial,playing:false,ledger,events});
  // Operator audit records never consume the deterministic simulation event-ID stream.
  run.events.push({id:`AUDIT-${point.id}-${rev}`,schemaVersion:'1.0',time:run.time,type:'CHECKPOINT_RESTORED',severity:'info',spacecraftId:null,message:`Restored ${point.name}; exact RNG and event queue retained.`,sequence:++run.sequence,auditOnly:true});
 }
