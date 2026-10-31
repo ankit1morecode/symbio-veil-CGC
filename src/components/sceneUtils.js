@@ -3,7 +3,7 @@ import * as THREE from 'three';
 export const EARTH_RADIUS_M = 6378137;
 export const EARTH_SCENE_RADIUS = 2.1;
 export const WORLD_SCALE = EARTH_SCENE_RADIUS / EARTH_RADIUS_M;
-export const palette = ['#79e5dc', '#edb26c', '#839cf1', '#dd91d9', '#a5c97b'];
+export const palette = ['#79e5dc', '#edb26c', '#839cf1', '#dd91d9', '#a5c97b', '#f18d82'];
 
 export function toScene(position = [0, 0, 0]) {
   const p = Array.isArray(position) ? position : [position.x || 0, position.y || 0, position.z || 0];

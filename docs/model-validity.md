@@ -2,7 +2,7 @@
 
 VEIL is a synthetic software research demonstrator. Its state, fault rates, hardware thresholds, interface behavior and mission artifacts are not calibrated spacecraft measurements. The UI distinguishes modeled physical state, agent observations and planned/contracted actions. A simulated mission result only supports conclusions within the listed model and scenario assumptions.
 
-The shipped spacecraft catalog uses a generic twelve-component schematic manifest covering the twelve fault classes. This is a practical demonstration of component selection and causal effects, not a complete enumeration of every logical component in the dossier's expanded OSV-REF hierarchy or a separately validated GENERAL-REF hardware model. See the verification report for the observed and automated checks.
+The shipped spacecraft catalog uses a generic twelve-component modeled core covering the twelve fault classes. The first six spacecraft additionally carry two distinct specialist board inventory entries each, with unknown health and no simulated independent measurements, outputs or electrical loads. Their researched concepts and sources are recorded in [specialist board references](specialist-board-references.md). The structural scene depicts a horizontal motherboard with upright daughterboards. This remains a schematic manifest rather than a complete enumeration of the dossier's expanded OSV-REF hierarchy or a separately validated GENERAL-REF hardware model. See the verification report for the observed and automated checks.
 
 ## Units and provenance
 

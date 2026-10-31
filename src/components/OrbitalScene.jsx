@@ -83,7 +83,7 @@ function Spacecraft({ satellite, index, showLabels, onSelect, focusedId }) {
       <mesh position={[.075, 0, 0]}><boxGeometry args={[.092, .047, .008]} /><meshStandardMaterial color="#335b87" emissive="#0d2941" emissiveIntensity={.4} metalness={.5} /></mesh>
       <mesh rotation={[Math.PI / 2, 0, 0]}><ringGeometry args={[.12, .124, 48]} /><meshBasicMaterial color={color} transparent opacity={hovered ? .9 : .45} side={THREE.DoubleSide} depthWrite={false} /></mesh>
     </group>
-    {showLabels && <SceneLabel title={id} subtitle={hovered ? `${String(health).replaceAll('_', ' ')} · ${Number.isFinite(satellite.lastObservedEnergyWh) ? satellite.lastObservedEnergyWh.toFixed(1) + ' Wh' : 'energy unknown'}` : ''} position={[.18, .17, 0]} accent={color} statusColor={healthColor(health)} onClick={e => { e.stopPropagation(); onSelect?.(id); }} onPointerOver={e => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }} onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }} />}
+    {showLabels && <SceneLabel title={satellite.name || id} subtitle={hovered ? `${id} · ${String(health).replaceAll('_', ' ')} · ${Number.isFinite(satellite.lastObservedEnergyWh) ? satellite.lastObservedEnergyWh.toFixed(1) + ' Wh' : 'energy unknown'}` : id} position={[.18, .17, 0]} accent={color} statusColor={healthColor(health)} onClick={e => { e.stopPropagation(); onSelect?.(id); }} onPointerOver={e => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }} onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }} />}
   </group>;
 }
 
@@ -95,14 +95,16 @@ function Connections({ spacecraft, connections, time, onPairSelect }) {
     const dataActive = ['OPERATIONAL', 'ACTIVE'].includes(link.dataState || link.data_state);
     const mechanical = link.mechanicalState || link.mechanical_state;
     if (!a || !b || (!dataActive && !['CAPTURED', 'APPROACH'].includes(mechanical))) return null;
+    if (mechanical === 'APPROACH' && link.status !== 'ACTIVE') return null;
     const p1 = toScene(a.position), p2 = toScene(b.position);
     const isPhysical = mechanical === 'CAPTURED';
+    const approaching = mechanical === 'APPROACH';
     const mid = p1.clone().lerp(p2, .5);
     const pulse = p1.clone().lerp(p2, (time % 5) / 5);
     return <group key={link.id || link.connection_id || index}>
-      <Line points={[p1, p2]} color={isPhysical ? '#edb26c' : '#79e5dc'} lineWidth={isPhysical ? 2 : 1.3} transparent opacity={.8} dashed={!isPhysical} dashSize={.055} gapSize={.035} onClick={e => { e.stopPropagation(); onPairSelect?.(link.id || link.connection_id || link); }} />
+      <Line points={[p1, p2]} color={isPhysical || approaching ? '#edb26c' : '#79e5dc'} lineWidth={isPhysical ? 2 : 1.3} transparent opacity={.8} dashed={!isPhysical} dashSize={.055} gapSize={.035} onClick={e => { e.stopPropagation(); onPairSelect?.(link.id || link.connection_id || link); }} />
       {dataActive && <mesh position={pulse}><sphereGeometry args={[.018, 8, 8]} /><meshBasicMaterial color="#ccfffa" /></mesh>}
-      <SceneLabel title={isPhysical ? 'COUPLED ↗' : 'CROSSLINK ↗'} position={mid} center={[.5, .5]} screenScale={.00053} accent={isPhysical ? '#edb26c' : '#79e5dc'} onClick={e => { e.stopPropagation(); onPairSelect?.(link.id || link.connection_id || link); }} onPointerOver={() => { document.body.style.cursor = 'pointer'; }} onPointerOut={() => { document.body.style.cursor = 'auto'; }} />
+      <SceneLabel title={isPhysical ? 'COUPLED ↗' : approaching ? 'APPROACH ↗' : 'CROSSLINK ↗'} position={mid} center={[.5, .5]} screenScale={.00053} accent={isPhysical || approaching ? '#edb26c' : '#79e5dc'} onClick={e => { e.stopPropagation(); onPairSelect?.(link.id || link.connection_id || link); }} onPointerOver={() => { document.body.style.cursor = 'pointer'; }} onPointerOut={() => { document.body.style.cursor = 'auto'; }} />
     </group>;
   });
 }
