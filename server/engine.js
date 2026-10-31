@@ -10,7 +10,7 @@ const fail=(code,message,status)=>{throw new SimulationError(code,message,status
 const copy=o=>structuredClone(o);
 const hash=o=>createHash('sha256').update(JSON.stringify(o)).digest('hex');
 const validModes=['HYBRID','MANUAL','AUTOMATIC'];
-export {telemetryCatalog, telemetrySeries};
+export {telemetryCatalog, telemetrySeries, initializeTelemetry, recordTelemetry};
 export {weights};
 const CONSERVATION_TOLERANCE_WH=1e-9;
 // Separation is a commanded impulse with a propellant cost, not a free state

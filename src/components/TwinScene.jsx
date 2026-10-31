@@ -111,7 +111,7 @@ function FitCamera({ exploded }) {
 }
 
 export function TwinScene({ satellite, selectedComponent, onSelectComponent, exploded = false, pair = false }) {
-  return <TwinBoundary><Canvas camera={{ position: [4, 2.8, 4.3], fov: 37, near: .05, far: 40 }} dpr={[1, 1.7]} gl={{ alpha: true, antialias: true }} fallback={<div style={{ color: '#8fa5b6', padding: 40 }}>A WebGL2-capable browser is required for this view.</div>}>
+  return <TwinBoundary><Canvas camera={{ position: [4.4, 3.08, 4.73], fov: 37, near: .05, far: 40 }} dpr={[1, 1.7]} gl={{ alpha: true, antialias: true }} fallback={<div style={{ color: '#8fa5b6', padding: 40 }}>A WebGL2-capable browser is required for this view.</div>}>
     <ambientLight intensity={.75} color="#a3b9ce" />
     <hemisphereLight intensity={1.4} color="#ceeaf7" groundColor="#182b40" />
     <directionalLight position={[3, 7, 4]} intensity={3.6} color="#e9edf0" />

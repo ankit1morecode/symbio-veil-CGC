@@ -2426,17 +2426,20 @@ input::placeholder {
 }
 
 .twin-canvas {
-    height: 380px;
-    min-height: 320px;
-    flex: 1
+    flex: 1 1 auto;
+    height: clamp(230px, 32vh, 352px);
+    min-height: 230px;
+    max-height: 352px;
+    position: relative;
+    overflow: hidden
 }
 
 .twin-scene-caption {
-    padding: 14px 17px;
+    padding: 10px 15px;
     display: flex;
     justify-content: space-between;
-    font-size: 6px;
-    color: #536f85;
+    font-size: 5.5px;
+    color: #4d6578;
     border-top: 1px solid #1f303c;
     gap: 12px
 }
@@ -4020,11 +4023,12 @@ input::placeholder {
     }
 
     .twin-canvas {
-        height: 360px
+        height: clamp(220px, 30vh, 320px);
+        max-height: 320px
     }
 
     .twin-scene-caption {
-        font-size: 6px
+        font-size: 5.5px
     }
 
     .twin-scene-caption>span:last-child {
