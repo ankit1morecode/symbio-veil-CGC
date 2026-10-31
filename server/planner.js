@@ -9,7 +9,21 @@
 import { clamp, linkGeometry } from './physics.js';
 
 export const weights = { benefit: .4, time: .2, cost: .15, risk: .15, donor: .1 };
-export const normalization = { timeHorizonS: 1800, energyCostScaleWh: 8, qualityRequired: .8 };
+// Explicit positive scales. Every score term is normalized to [0,1] by one of
+// these, so no hidden constant enters the ranking.
+export const normalization = { timeHorizonS: 1800, energyCostScaleWh: 8, qualityRequired: .8,
+  propellantScaleKg: .05, thermalLimitK: 333.15, thermalBaselineK: 300, captureSpeedLimitMps: .1, referenceLinkKbps: 256,
+  transferEfficiency: .85, powerCapW: 10, serviceWindowS: 600,
+  observationReliability: .96, observationTimeoutS: 6 };
+
+// Confidence in a view: the declared sensor reliability discounted by how stale
+// the observation is. A vehicle whose monitoring is invalid has none.
+export function viewConfidence(view, time) {
+  if (!view.observationValid) return 0;
+  const age = Math.max(0, time - (view.observedAt ?? 0));
+  const freshness = clamp(1 - age / (2 * normalization.observationTimeoutS), .25, 1);
+  return normalization.observationReliability * freshness;
+}
 
 const observedFactor = health => health === 'FAILED' ? 0 : health === 'DEGRADED' ? .5 : health === 'UNKNOWN' ? 0 : 1;
 
@@ -66,11 +80,12 @@ export function planningContext(run) {
     time: run.time,
     policyId: run.policyId,
     scenarioId: run.scenarioId,
-    emergency: run.scenarioId === 'E4',
-    cooperationPermitted: run.policyId !== 'B0' && run.scenarioId !== 'E0',
-    physicalPermitted: ['E2', 'E4', 'E6'].includes(run.scenarioId),
-    integrationPermitted: run.scenarioId === 'E6',
-    reducedBenefitPhysical: run.scenarioId === 'E6',
+    // Declared scenario capabilities, never a match on the scenario identifier.
+    emergency: !!run.scenario.emergency,
+    cooperationPermitted: run.policyId !== 'B0' && run.scenario.cooperationEnabled !== false,
+    physicalPermitted: !!run.scenario.permitsPhysical,
+    integrationPermitted: !!run.scenario.permitsIntegration,
+    reducedBenefitPhysical: !!run.scenario.reducedPhysicalBenefit,
     reservedProviders: new Set(run.contracts.filter(c => held.includes(c.status)).map(c => c.participants[1])),
     confirmedFaults: confirmed,
   };
@@ -133,14 +148,41 @@ export function candidate(ctx, requester, provider, mode, providerPriority = nul
     add('Capability restores required service', !powerFault || !['F-03', 'F-04'].some(model => powerFault.has(model)), 'WIRELESS_CANNOT_TRANSFER_POWER');
   }
 
-  const features = { benefit: ctx.reducedBenefitPhysical && mode === 'C2' ? .5 : 1, time: clamp(completionS / normalization.timeHorizonS, 0, 1),
-    cost: physical ? .22 : .035, risk: physical ? .12 : .025, donor: physical ? .12 : .025 };
+  // Resource cost of the option, from the caps the executor will actually enforce.
+  const costs = physical
+    ? { energyWh: normalization.powerCapW * normalization.serviceWindowS / 3600, propellantKg: .002, dataMbit: 0 }
+    : { energyWh: .15, propellantKg: 0, dataMbit: 8 };
+
+  // Every term below is computed from observable state. Nothing is keyed on the
+  // mode alone, so a donor near its reserve and a donor with ample margin do not
+  // score alike for the same request.
+  const deliverable = physical
+    ? costs.energyWh * normalization.transferEfficiency
+    : b.computeQuality;
+  const deficitWh = Math.max(a.reserveWh - a.energyWh, 0);
+  let benefit = physical
+    ? (deficitWh > 0 ? clamp(deliverable / deficitWh, 0, 1) : 1)
+    : clamp(deliverable / normalization.qualityRequired, 0, 1);
+  if (ctx.reducedBenefitPhysical && mode === 'C2') benefit *= .5;
+
+  const donorMarginWh = Math.max(b.energyWh - b.reserveWh, 0);
+  const donor = donorMarginWh > 0 ? clamp(costs.energyWh / donorMarginWh, 0, 1) : 1;
+
+  const cost = clamp(costs.energyWh / normalization.energyCostScaleWh + costs.propellantKg / normalization.propellantScaleKg, 0, 1);
+
+  const thermalSpan = normalization.thermalLimitK - normalization.thermalBaselineK;
+  const thermalRisk = clamp((Math.max(a.temperatureK, b.temperatureK) - normalization.thermalBaselineK) / thermalSpan, 0, 1);
+  const approachRisk = physical ? clamp(geo.relativeSpeedMps / normalization.captureSpeedLimitMps, 0, 1) : 0;
+  const linkRisk = physical ? 0 : clamp(1 - Math.min(a.radioKbps, b.radioKbps) / normalization.referenceLinkKbps, 0, 1);
+  const risk = clamp((physical ? .10 : .02) + .10 * thermalRisk + .10 * approachRisk + .10 * linkRisk, 0, 1);
+
+  const features = { benefit, time: clamp(completionS / normalization.timeHorizonS, 0, 1), cost, risk, donor };
   const passed = checks.every(check => check.pass);
   const score = weights.benefit * features.benefit + weights.time * (1 - features.time) + weights.cost * (1 - features.cost) +
     weights.risk * (1 - features.risk) + weights.donor * (1 - features.donor);
   return { id: `${a.id}-${b.id}-${mode}`, provider: b.id, providerPriority, mode, status: passed ? 'ELIGIBLE' : 'REJECTED',
-    score: passed ? score : null, checks, features,
-    costs: { energyWh: physical ? 1.6666667 : .15, propellantKg: physical ? .002 : 0, dataMbit: physical ? 0 : 8 },
+    score: passed ? score : null, checks, features, costs,
+    featureBasis: { deliverable, deficitWh, donorMarginWh, thermalRisk, approachRisk, linkRisk },
     completionS, reason: passed ? 'All mandatory constraints passed' : checks.filter(c => !c.pass).map(c => c.reason).join(' · '),
     intervention: Number(mode[1]) };
 }

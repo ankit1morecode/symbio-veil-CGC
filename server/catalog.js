@@ -3,14 +3,19 @@ import {makeSpecialistBoards} from './specialist-boards.js';
 export const SATELLITE_NAMES = ['AURORA', 'ATLAS', 'ORION', 'VEGA', 'NOVA', 'HELIOS'];
 export const scenarios = [
  {id:'VEIL-REF-01',name:'Orbital symbiosis',description:'A two-spacecraft research constellation. Introduce a fault to explore autonomous recovery.',mode:'C1',fault:null},
- {id:'E0',name:'Independent baseline',description:'Processor loss with peer assistance disabled.',mode:'C0',fault:'F-01'},
+ {id:'E0',name:'Independent baseline',description:'Processor loss with peer assistance disabled.',mode:'C0',fault:'F-01',cooperationEnabled:false},
  {id:'E1',name:'Wireless capability recovery',description:'A compatible peer fulfils an imaging processing task over a bounded crosslink.',mode:'C1',fault:'F-01'},
- {id:'E2',name:'Temporary physical support',description:'A validated near-coorbital pair approaches, captures, transfers bounded power, and separates.',mode:'C2',fault:'F-03'},
- {id:'E3',name:'Reciprocal work',description:'Compatible reciprocal processing and relay services with separately recorded costs.',mode:'C1',fault:'F-01'},
- {id:'E4',name:'Emergency power / reserve',description:'A low-energy receiver needs support before its survival reserve is exhausted.',mode:'C2',fault:'F-03'},
+ {id:'E2',name:'Temporary physical support',description:'A validated near-coorbital pair approaches, captures, transfers bounded power, and separates.',mode:'C2',fault:'F-03',permitsPhysical:true,solarPausesMission:true},
+ {id:'E3',name:'Reciprocal work',description:'Compatible reciprocal processing and relay services with separately recorded costs.',mode:'C1',fault:'F-01',reciprocalService:true},
+ {id:'E4',name:'Emergency power / reserve',description:'A low-energy receiver needs support before its survival reserve is exhausted.',mode:'C2',fault:'F-03',permitsPhysical:true,emergency:true,solarPausesMission:true},
  {id:'E5',name:'Cross-generation interface',description:'Direct interfaces are incompatible; compatible semantic wireless services remain eligible.',mode:'C1',fault:'F-01'},
- {id:'E6',name:'Persistent integration',description:'A near-coorbital pair evaluates longer-lived integration and updated inertia.',mode:'C3',fault:'F-03'},
-].map(x=>({...x,scenario_id:x.id,schema_version:'1.0',fidelity:'P2 SYNTHETIC REFERENCE',duration:86400,seed:20261029,modelValidity:'Closed-form two-body Kepler orbits; first-order thermal; geometric radio; bounded near-coorbital approach proxy. Not flight qualified.'}));
+ {id:'E6',name:'Persistent integration',description:'A near-coorbital pair evaluates longer-lived integration and updated inertia.',mode:'C3',fault:'F-03',permitsPhysical:true,permitsIntegration:true,solarPausesMission:true,reducedPhysicalBenefit:true},
+].map(x=>({
+ // Declared capability flags. The planner and the physical model read these
+ // rather than matching on a scenario identifier.
+ permitsPhysical:false,permitsIntegration:false,emergency:false,cooperationEnabled:true,
+ solarPausesMission:false,reducedPhysicalBenefit:false,reciprocalService:false,
+ ...x,scenario_id:x.id,schema_version:'1.0',fidelity:'P2 SYNTHETIC REFERENCE',duration:86400,seed:20261029,modelValidity:'Closed-form two-body Kepler orbits; first-order thermal; geometric radio; bounded near-coorbital approach proxy. Not flight qualified.'}));
 export const faultModels = [
  ['F-01','Controller / computation','compute','Compute capacity 100% to 0%; mission tasks pause.'],
  ['F-02','Regulated power rail','rail','3.3 V to 2.9 V; dependent executive services lose power.'],

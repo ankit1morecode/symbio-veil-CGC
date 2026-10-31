@@ -17,7 +17,10 @@ export function initializeCommunications(run) {
     }
   }
   run.communications = {
-    enabled: run.spacecraft.length === 6 && run.policyId !== 'B0' && run.scenarioId !== 'E0',
+    // Coordination traffic belongs to the multi-vehicle constellation views. The
+    // two-vehicle reference experiments stay free of it so their energy fixtures
+    // remain reproducible.
+    enabled: run.spacecraft.length > 2 && run.policyId !== 'B0' && run.scenarioId !== 'E0',
     slotSeconds: SLOT_SECONDS,
     nextSlotAt: run.time,
     links: [],
